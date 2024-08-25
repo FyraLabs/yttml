@@ -78,3 +78,17 @@ Documentation for the SRV3 format can be found [here](crates/srv3-ttml/internals
 
 - [srv3-ttml](crates/srv3-ttml): A serde parser for the SRV3 format.
 - yttml (this crate): A command-line utility for reading SRV3 subtitles and converting them (work in progress)
+
+
+## Testing
+
+To download SRV3 subtitles from YouTube, you can use the [yt-dlp]() utility, and download the video with the `--write-subs`, `--sub-langs` and `--sub-format=srv3` flags.
+
+You may also directly download from the API using this URL format:
+```
+https://www.youtube.com/api/timedtext?v=<video ID>&lang=<language code>&fmt=srv3
+```
+
+## License
+
+This project is licensed under the MIT license.
