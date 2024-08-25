@@ -46,5 +46,6 @@ Example videos showcasing the capabilities of the SRV3 format
   [![Example image](docs/assets/chocomint.png)](https://youtu.be/pfkBYHFZAt8)
 - [32ki, Hatsune Miku & Kasane Teto - Mesmerizer](https://youtu.be/19y8YTbvri8) (Thai captions only)
   [![Example image](docs/assets/mesmerizer.png)](https://youtu.be/19y8YTbvri8)
+- [x0o0x - Kisaragi Station](https://youtu.be/UxM5UgpXYM4) (Use British English subtitles for the styled version)
 - Various news clips from American news networks which provide real-time captioning with a teletype effect [like this](https://youtu.be/FVeoC9pm5rI)
 - Various VTuber clips, example [here](https://youtu.be/u_lcDl6qnh4)
