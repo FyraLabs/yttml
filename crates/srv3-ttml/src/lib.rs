@@ -116,6 +116,11 @@ pub struct Pen {
     /// - Before text
     /// - After text
     pub ruby: Option<RubyPart>,
+    
+    
+    #[serde(rename = "@hg")]
+    /// Packing of text
+    pub packing: Option<u32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]

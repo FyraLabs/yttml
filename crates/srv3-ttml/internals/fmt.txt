@@ -1,0 +1,37 @@
+WriteHead()
+- start element: head 
+- end 
+WriteWindowPosition()
+- start: wp 
+id = position id (on screen? chronologically?)
+ap = anchor point (position on screen?)
+ah = X location
+av = Y location
+-end
+WriteWindowStyle()
+- start: ws
+id = style id
+ju = justification id of anchor point (idk)
+pd = ?
+sd = ?
+- end
+WritePen() (text style related)
+- start: pen
+id = pen id (?)
+fs = font style id
+sz = font scale
+of = offset
+b = bold (0/1)
+i = italic (0/1)
+u = underline (0/1)
+fc = foreground color
+fo = foreground opacity
+bc = background color
+bo = background opacity
+rb = ruby text
+hg = packed (0/1) (?)
+- end
+WriteBody()
+- start: body
+WriteLine(writer, line, positions, windowStyles, pens) (?)
+- end
