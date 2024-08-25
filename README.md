@@ -37,7 +37,8 @@ fansubbed anime, Japanese music videos, or VTuber clips on YouTube.
 
 This makes the SRV3 format similar to Advanced Substation Alpha instead of the more common SubRip or WebVTT formats in terms of features.
 
-Example videos showcasing the capabilities of the SRV3 format
+### Example videos showcasing the capabilities of the SRV3 format
+
 - [Shinra-bansho - Aria on the line of fate MV](https://youtu.be/AYpVrYFg5uo)
   [![Example image](docs/assets/aria.png)](https://youtu.be/AYpVrYFg5uo)
 - [Kizuna AI - AIAIAI MV](https://youtu.be/S8dmq5YIUoc)
@@ -47,5 +48,7 @@ Example videos showcasing the capabilities of the SRV3 format
 - [32ki, Hatsune Miku & Kasane Teto - Mesmerizer](https://youtu.be/19y8YTbvri8) (Thai captions only)
   [![Example image](docs/assets/mesmerizer.png)](https://youtu.be/19y8YTbvri8)
 - [x0o0x - Kisaragi Station](https://youtu.be/UxM5UgpXYM4) (Use British English subtitles for the styled version)
+- [Kikuo ft. Hatsune Miku - Love me, Love me, Love me](https://youtu.be/NTrm_idbhUk)
+- Most, if not all hololive music videos are officially subtitled in this format, with karaoke timing and custom text formatting
 - Various news clips from American news networks which provide real-time captioning with a teletype effect [like this](https://youtu.be/FVeoC9pm5rI)
 - Various VTuber clips, example [here](https://youtu.be/u_lcDl6qnh4)
