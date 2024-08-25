@@ -39,6 +39,7 @@ This makes the SRV3 format similar to Advanced Substation Alpha instead of the m
 
 ### Example videos showcasing the capabilities of the SRV3 format
 
+- [PinocchioP - Anonymous M](https://youtu.be/yiqEEL7ac6M) (`Thai - animation` caption track)
 - [Shinra-bansho - Aria on the line of fate MV](https://youtu.be/AYpVrYFg5uo)
   [![Example image](docs/assets/aria.png)](https://youtu.be/AYpVrYFg5uo)
 - [Kizuna AI - AIAIAI MV](https://youtu.be/S8dmq5YIUoc)
@@ -49,7 +50,6 @@ This makes the SRV3 format similar to Advanced Substation Alpha instead of the m
   [![Example image](docs/assets/mesmerizer.png)](https://youtu.be/19y8YTbvri8)
 - [x0o0x - Kisaragi Station](https://youtu.be/UxM5UgpXYM4) (Use British English subtitles for the styled version)
 - [Kikuo ft. Hatsune Miku - Love me, Love me, Love me](https://youtu.be/NTrm_idbhUk)
-- [PinocchioP - Anonymous M](https://youtu.be/yiqEEL7ac6M) (`Thai - animation` caption track)
 - Most, if not all hololive music videos are officially subtitled in this format, with karaoke timing and custom text formatting
 - Various news clips from American news networks which provide real-time captioning with a teletype effect [like this](https://youtu.be/FVeoC9pm5rI)
 - Various VTuber clips, example [here](https://youtu.be/u_lcDl6qnh4)
