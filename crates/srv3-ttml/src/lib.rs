@@ -203,10 +203,26 @@ pub struct WindowStyle {
     #[serde(rename = "@ju")]
     /// Reference to anchor point to justify text???
     pub justify: Option<u32>,
+    
+    
+    // todo: Both of these should be an enum of 0-3 but I don't know what to name them
+    
+    /// Pitch direction of text (vertical tilt)
     #[serde(rename = "@pd")]
-    pub print_direction: Option<u32>,
+    pub pitch_direction: Option<Rotation>,
+    
+    /// Yaw (skew) direction of text (horizontal tilt)
     #[serde(rename = "@sd")]
-    pub scroll_direction: Option<u32>,
+    pub skew_direction: Option<Rotation>,
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u32)]
+pub enum Rotation {
+    Zero = 0,
+    Ninety = 1,
+    OneEighty = 2,
+    TwoSeventy = 3,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -228,11 +244,21 @@ pub struct Paragraph {
     #[serde(rename = "$value")]
     // Always treat the inner text as string
     pub inner: Vec<BodyElement>,
+    /// Timestamp on when to display the caption
     #[serde(rename = "@t")]
     pub timestamp: u64,
+    /// Duration to display the caption for
     #[serde(rename = "@d")]
-    // duration??? what is this?
     pub duration: u64,
+    
+    /// Reference to a window position ID
+    #[serde(rename = "@wp")]
+    pub window_position: Option<u32>,
+    
+    /// Reference to a window style ID
+    #[serde(rename = "@ws")]
+    pub window_style: Option<u32>,
+    
 }
 
 
