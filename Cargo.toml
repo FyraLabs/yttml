@@ -1,8 +1,24 @@
 [package]
-name = "ytsub-rs"
-version = "0.1.0"
+name = "yttml"
+version = "0.0.1"
 edition = "2021"
-
+description = "A collection of utilities for working with YouTube-flavored TTML (SRV3) captions"
+license = "MIT"
+authors = [
+    "Cappy Ishihara <cappy@fyralabs.com>"
+]
+categories = [
+    "text-processing",
+    "multimedia::video"
+]
+keywords = [
+    "youtube",
+    "ttml",
+    "srv3",
+    "captions",
+    "subtitles"
+]
+repository = "https://github.com/FyraLabs/yttml"
 [dependencies]
 srv3-ttml = { path = "crates/srv3-ttml" }
 

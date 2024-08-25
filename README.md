@@ -1,11 +1,29 @@
-# ytsub-rs
+# yttml
 
 A collection of Rust utilities and crates for working with YouTube styled subtitles, an attempt to rewrite the
 [YTSubConverter](https://github.com/arcusmaximus/YTSubConverter) in Rust.
 
-While the official YouTube subtitle editor lets you edit timed text, it actually does *not* support
-the full range of features that the proprietary YouTube subtitle format supports. This project aims to provide
-a more complete solution for working with YouTube subtitles.
+> [!NOTE]
+> This project is still in early development and is not yet ready for use, however it is designed
+> to be a more modern and stable alternative to the original YTSubConverter.
+
+## Motivation
+
+If you've ever tried to work with YouTube subtitles, you may have noticed that the official YouTube subtitle editor
+is quite limited in terms of features.
+
+However, the YouTube captioning system actually supports a wide range of features that are not exposed in the official
+editor, the format is called YTT (YouTube Timed Text), version 3 (also called SRV3).
+
+This format supports almost all the features you would expect from an advanced format like SSA (SubStation Alpha),
+including text formatting, custom fonts, text alignment, text rotation, karaoke timing, and more.
+
+The original YTSubConverter was a C# utility that allowed you to convert between various subtitle formats, focusing primarily
+on converting SSA to SRV3. However, the CLI interface was quite clunky and the codebase was not very maintainable, and there was
+a complete lack of documentation on the SRV3 format.
+
+This project was created to provide a more modern and maintainable alternative to the original YTSubConverter,
+and to fully document and study YouTube's proprietary subtitle format.
 
 ## The SRV3 (YouTube Timed Text) Format
 
@@ -29,13 +47,15 @@ a range of other features such as:
 - Custom text rotation
 - Karaoke timing
 - Vertical text
-- Ruby (furigana) text
+- Ruby (furigana/bopomofo) text
 
 The usage of this format is popular among fansubbers and captioners especially in Japanese media and anime, as it allows for a wide range of text formatting options
 that can emulate and even overlay original text in a video. You will usually see these kinds of styled subtitles in
 fansubbed anime, Japanese music videos, or VTuber clips on YouTube.
 
-This makes the SRV3 format similar to Advanced Substation Alpha instead of the more common SubRip or WebVTT formats in terms of features.
+This makes the SRV3 format similar to Advanced SubStation Alpha instead of the more common SubRip or WebVTT formats in terms of features.
+
+Documentation for the SRV3 format can be found [here](crates/srv3-ttml/internals/srv3-format.md).
 
 ### Example videos showcasing the capabilities of the SRV3 format
 
@@ -54,12 +74,7 @@ This makes the SRV3 format similar to Advanced Substation Alpha instead of the m
 - Various news clips from American news networks which provide real-time captioning with a teletype effect [like this](https://youtu.be/FVeoC9pm5rI)
 - Various VTuber clips, example [here](https://youtu.be/u_lcDl6qnh4)
 
-
-## Technical details
-
-Documentation for the SRV3 format can be found [here](crates/srv3-ttml/internals/srv3-format.md).
-
 ## Crates
 
 - [srv3-ttml](crates/srv3-ttml): A serde parser for the SRV3 format.
-- ytsub (this crate): A command-line utility for reading SRV3 subtitles and converting them
+- yttml (this crate): A command-line utility for reading SRV3 subtitles and converting them (work in progress)
