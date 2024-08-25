@@ -43,7 +43,7 @@ Example videos showcasing the capabilities of the SRV3 format
 - [Kizuna AI - AIAIAI MV](https://youtu.be/S8dmq5YIUoc)
 - [ZUTOMAYO - Fastening MV](https://youtu.be/COll6PdtI5w)
 - [GYARI, Kotonoha Akane & Aoi - Aoi-chan is going to eat ChocoMint no matter what](https://youtu.be/pfkBYHFZAt8) (Non-English example since the English version has been automatically unformatted due to YouTube's subtitle editor being used)
-  [![Example image](docs/assets/aoi.png)](https://youtu.be/pfkBYHFZAt8)
+  [![Example image](docs/assets/chocomint.png)](https://youtu.be/pfkBYHFZAt8)
 - [32ki, Hatsune Miku & Kasane Teto - Mesmerizer](https://youtu.be/19y8YTbvri8) (Thai captions only)
   [![Example image](docs/assets/mesmerizer.png)](https://youtu.be/19y8YTbvri8)
 - Various news clips from American news networks which provide real-time captioning with a teletype effect [like this](https://youtu.be/FVeoC9pm5rI)
