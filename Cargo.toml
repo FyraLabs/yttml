@@ -20,7 +20,7 @@ keywords = [
 ]
 repository = "https://github.com/FyraLabs/yttml"
 [dependencies]
-srv3-ttml = { path = "crates/srv3-ttml" }
+srv3-ttml = { path = "crates/srv3-ttml", version = "0.1.0"}
 
 [workspace]
 members = [
