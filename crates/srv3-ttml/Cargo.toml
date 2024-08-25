@@ -1,0 +1,15 @@
+[package]
+name = "srv3-ttml"
+version = "0.1.0"
+edition = "2021"
+authors = ["Cappy Ishihara <cappy@fyralabs.com>"]
+categories = [
+    "parsing",
+    "text-processing",
+    "multimedia::video"
+]
+description = "Youtube-flavored TTML (SRV3) captioning format parser"
+[dependencies]
+hex_color = { version = "3.0.0", features = ["serde"] }
+quick-xml = { version = "0.36.1", features = ["serde", "serde-types", "serialize"] }
+serde = { version = "1.0.209", features = ["derive"] }

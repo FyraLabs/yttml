@@ -1,0 +1,12 @@
+[package]
+name = "ytsub-rs"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+srv3-ttml = { path = "crates/srv3-ttml" }
+
+[workspace]
+members = [
+   "crates/srv3-ttml"
+]
