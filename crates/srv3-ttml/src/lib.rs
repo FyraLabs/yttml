@@ -254,6 +254,96 @@ pub struct Paragraph {
     pub window_style: Option<u32>,
 }
 
+/// Trait for nested elements in the body
+trait ElementExt {
+    /// Concatenates text elements into a single string
+    ///
+    /// This is useful for converting the text back into a plain text format
+    fn text(&self) -> String;
+    // default implementation
+    /// Concatenates text elements into a single string, but with markup applied
+    ///
+    /// This is meant to be used for debugging purposes,
+    /// all serialization should be done through serde, not this method
+    fn text_markup(&self) -> String {
+        self.text()
+    }
+}
+
+impl ElementExt for Vec<BodyElement> {
+    fn text(&self) -> String {
+        // add newlines between paragraphs
+        self.iter()
+            .fold(String::new(), |acc, elem| acc + &elem.text() + "\n").trim().to_string()
+    }
+}
+
+impl ElementExt for String {
+    fn text(&self) -> String {
+        self.clone()
+    }
+}
+
+// todo: maybe implicitly make use of the trait anyway?
+impl ElementExt for BodyElement {
+    fn text(&self) -> String {
+        match self {
+            Self::Text(t) => t.text(),
+            Self::Br(x) => x.text(),
+            BodyElement::Div(x) => x.text(),
+            BodyElement::Span(x) => x.text(),
+            Self::Paragraph(x) => x.text(),
+        }
+    }
+}
+
+impl ElementExt for Paragraph {
+    fn text(&self) -> String {
+        self.inner
+            .iter()
+            .fold(String::new(), |acc, elem| match elem {
+                BodyElement::Text(t) => acc + t,
+                BodyElement::Br(_) => acc + "\n",
+                _ => acc,
+            })
+    }
+    fn text_markup(&self) -> String {
+        self.inner
+            .iter()
+            .fold(String::new(), |acc, elem| match elem {
+                BodyElement::Text(t) => acc + t,
+                BodyElement::Br(_) => acc + "<br>",
+                _ => acc,
+            })
+    }
+}
+
+impl Paragraph {
+    /// Concatenates text elements into a single string
+    ///
+    /// This is useful for converting the text back into a plain text format
+    ///
+    /// However, this function does not handle and remove zero-width spaces (U+200B) which are used in YTT
+    /// to prevent some text rendering issues. If you want to remove ZWSPs, use `text_no_zwsp` instead.
+    pub fn text(&self) -> String {
+        <Self as ElementExt>::text(self)
+    }
+
+    pub fn text_markup(&self) -> String {
+        <Self as ElementExt>::text_markup(self)
+    }
+
+    /// Concatenates text elements into a single string, but removes zero-width spaces (U+200B)
+    ///
+    /// ZWSP is used in YTT as a workaround to prevent some text rendering issues, but when converting back to
+    /// plain text, we don't want to include them.
+    ///
+    /// For conversions from other formats, ZWSPs should be added back in.
+    pub fn text_no_zwsp(&self) -> String {
+        self.text().replace("\u{200B}", "")
+    }
+}
+
 // todo: make the thing like HTML
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -266,8 +356,52 @@ pub struct Span {
     // nested inside is more spans or something
     // this is a recursive structure
 }
+
+impl ElementExt for Span {
+    fn text(&self) -> String {
+        self.inner
+            .as_ref()
+            .map(|inner_elements| inner_elements.text())
+            .unwrap_or_default()
+    }
+
+    // text_markup: wrap in <s> tags
+    fn text_markup(&self) -> String {
+        // todo: possibly turn this into something that iterates through all the fields
+        // and add to attribute, but for now this is fine since it's supposed
+        // to be used for debug
+        //
+        // serialization of YTT should be done with serde, not this.
+        let start_tag = format!(
+            "<s{}>",
+            self.pen
+                .map_or(String::new(), |pen| format!(" p=\"{}\"", pen))
+        );
+        let end_tag = "</s>";
+
+        let inner_text = self
+            .inner
+            .as_ref()
+            .map(|inner_elements| {
+                inner_elements
+                    .iter()
+                    .fold(String::new(), |acc, elem| acc + &elem.text_markup())
+            })
+            .unwrap_or_default();
+
+        format!("{}{}{}", start_tag, inner_text, end_tag)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Br;
+pub struct Br; // todo: Somehow convert this into a newline
+
+impl ElementExt for Br {
+    fn text(&self) -> String {
+        "\n".to_string()
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Div {
     #[serde(rename = "$value")]
@@ -300,6 +434,10 @@ mod tests {
         let parse = TimedText::from_str(file).unwrap();
 
         println!("{:#?}", parse);
+
+        let t = parse.body.elements.text();
+
+        println!("{}", t);
     }
 
     #[test]
@@ -308,5 +446,8 @@ mod tests {
         let parse = TimedText::from_str(file).unwrap();
 
         println!("{:#?}", parse);
+        let t = parse.body.elements.text();
+
+        println!("{}", t);
     }
 }
