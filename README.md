@@ -53,3 +53,13 @@ This makes the SRV3 format similar to Advanced Substation Alpha instead of the m
 - Most, if not all hololive music videos are officially subtitled in this format, with karaoke timing and custom text formatting
 - Various news clips from American news networks which provide real-time captioning with a teletype effect [like this](https://youtu.be/FVeoC9pm5rI)
 - Various VTuber clips, example [here](https://youtu.be/u_lcDl6qnh4)
+
+
+## Technical details
+
+Documentation for the SRV3 format can be found [here](crates/srv3-ttml/internals/srv3-format.md).
+
+## Crates
+
+- [srv3-ttml](crates/srv3-ttml): A serde parser for the SRV3 format.
+- ytsub (this crate): A command-line utility for reading SRV3 subtitles and converting them
