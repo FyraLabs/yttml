@@ -127,8 +127,6 @@ pub struct Pen {
     pub packing: Option<u32>,
 }
 
-
-
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum RubyPart {
@@ -158,8 +156,6 @@ impl Default for FontStyle {
     }
 }
 
-
-
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
 pub enum AnchorPoint {
@@ -185,11 +181,11 @@ pub struct WindowPosition {
     /// References to an anchor point.
     /// Is an enum which specify which corner of the screen the text is anchored to.
     pub anchor_point: Option<AnchorPoint>,
-    
+
     /// X position from anchor point
     #[serde(rename = "@ah")]
     pub anchor_horizontal: Option<i32>,
-    
+
     /// Y position from anchor point
     #[serde(rename = "@av")]
     pub anchor_vertical: Option<i32>,
@@ -203,14 +199,12 @@ pub struct WindowStyle {
     #[serde(rename = "@ju")]
     /// Reference to anchor point to justify text???
     pub justify: Option<u32>,
-    
-    
+
     // todo: Both of these should be an enum of 0-3 but I don't know what to name them
-    
     /// Pitch direction of text (vertical tilt)
     #[serde(rename = "@pd")]
     pub pitch_direction: Option<Rotation>,
-    
+
     /// Yaw (skew) direction of text (horizontal tilt)
     #[serde(rename = "@sd")]
     pub skew_direction: Option<Rotation>,
@@ -250,17 +244,15 @@ pub struct Paragraph {
     /// Duration to display the caption for
     #[serde(rename = "@d")]
     pub duration: u64,
-    
+
     /// Reference to a window position ID
     #[serde(rename = "@wp")]
     pub window_position: Option<u32>,
-    
+
     /// Reference to a window style ID
     #[serde(rename = "@ws")]
     pub window_style: Option<u32>,
-    
 }
-
 
 // todo: make the thing like HTML
 
@@ -306,15 +298,15 @@ mod tests {
     fn test_parse_file() {
         let file = include_str!("../test/aishite.srv3");
         let parse = TimedText::from_str(file).unwrap();
-        
+
         println!("{:#?}", parse);
     }
-    
+
     #[test]
     fn test_parse_file_unformatted() {
         let file = include_str!("../test/mesmerizer.srv3.xml");
         let parse = TimedText::from_str(file).unwrap();
-        
+
         println!("{:#?}", parse);
     }
 }
