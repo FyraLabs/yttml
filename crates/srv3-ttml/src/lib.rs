@@ -1,5 +1,6 @@
 use hex_color::HexColor;
 use serde::{Deserialize, Serialize};
+use serde_repr::{Deserialize_repr, Serialize_repr};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "timedtext")]
 /// The TimedText struct is the root of the XML file.
@@ -7,8 +8,13 @@ use serde::{Deserialize, Serialize};
 pub struct TimedText {
     #[serde(rename = "format")]
     pub format: Option<String>,
-    pub head: Head,
+    pub head: Option<Head>,
     pub body: Body,
+}
+impl TimedText {
+    pub fn from_str(s: &str) -> Result<Self, quick_xml::DeError> {
+        quick_xml::de::from_str(s)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -36,7 +42,8 @@ pub struct Head {
 /// Pen is a struct that contains the style of the text...?
 pub struct Pen {
     /// ID of pen
-    pub id: u32,
+    #[serde(rename = "@id")]
+    pub id: Option<u32>,
 
     // --- Text styles ---
     #[serde(rename = "@b")]
@@ -120,7 +127,10 @@ pub struct Pen {
     pub packing: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u32)]
 pub enum RubyPart {
     None = 0,
     Base = 1,
@@ -128,21 +138,40 @@ pub enum RubyPart {
     BeforeText = 4,
     AfterText = 5,
 }
-#[derive(Debug, Serialize, Deserialize)]
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u32)]
 pub enum FontStyle {
-    Roboto = 0,
     CourierNew = 1,
     TimesNewRoman = 2,
     LucidaConsole = 3,
     ComicSans = 5,
     MonotypeCorsiva = 6,
     CarriosGothic = 7,
+    #[serde(other)]
+    Roboto = 0,
 }
 
 impl Default for FontStyle {
     fn default() -> Self {
         FontStyle::Roboto
     }
+}
+
+
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u32)]
+pub enum AnchorPoint {
+    TopLeft = 0,
+    TopCenter = 1,
+    TopRight = 2,
+    MiddleLeft = 3,
+    Center = 4,
+    MiddleRight = 5,
+    BottomLeft = 6,
+    BottomCenter = 7,
+    BottomRight = 8,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -153,12 +182,17 @@ pub struct WindowPosition {
     #[serde(rename = "@id")]
     pub id: u32,
     #[serde(rename = "@ap")]
-    /// References to an anchor point
-    pub anchor_point: Option<u32>,
+    /// References to an anchor point.
+    /// Is an enum which specify which corner of the screen the text is anchored to.
+    pub anchor_point: Option<AnchorPoint>,
+    
+    /// X position from anchor point
     #[serde(rename = "@ah")]
-    pub anchor_horizontal: Option<u32>,
+    pub anchor_horizontal: Option<i32>,
+    
+    /// Y position from anchor point
     #[serde(rename = "@av")]
-    pub anchor_vertical: Option<u32>,
+    pub anchor_vertical: Option<i32>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -178,6 +212,7 @@ pub struct WindowStyle {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Body {
     // todo: parse this properly into a list of enums or something
+    #[serde(rename = "$value")]
     pub elements: Vec<BodyElement>,
 }
 
@@ -191,7 +226,8 @@ pub struct Paragraph {
     // The actual text inside the <p> tag
     // <p>text</p>
     #[serde(rename = "$value")]
-    pub text: String,
+    // Always treat the inner text as string
+    pub inner: Vec<BodyElement>,
     #[serde(rename = "@t")]
     pub timestamp: u64,
     #[serde(rename = "@d")]
@@ -199,19 +235,60 @@ pub struct Paragraph {
     pub duration: u64,
 }
 
+
 // todo: make the thing like HTML
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Span;
+pub struct Span {
+    #[serde(rename = "$value")]
+    pub inner: Option<Vec<BodyElement>>,
+    /// Reference to a pen style ID
+    #[serde(rename = "p")]
+    pub pen: Option<u32>,
+    // nested inside is more spans or something
+    // this is a recursive structure
+}
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Br;
 #[derive(Debug, Serialize, Deserialize)]
-pub struct Div;
+pub struct Div {
+    #[serde(rename = "$value")]
+    pub elements: Vec<BodyElement>,
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum BodyElement {
+    #[serde(rename = "$text")]
+    Text(String),
+    #[serde(rename = "p")]
     Paragraph(Paragraph),
+    #[serde(rename = "s")]
     Span(Span),
+    #[serde(rename = "br")]
     Br(Br),
-    Div(Div),
+    #[serde(rename = "div")]
+    Div(Vec<Self>),
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // TODO: So formatted files with <s> tags inside the <p> tags are not parsed correctly
+    // We want to treat them literally as <s> tags, not as a separate element
+    #[test]
+    fn test_parse_file() {
+        let file = include_str!("../test/aishite.srv3");
+        let parse = TimedText::from_str(file).unwrap();
+        
+        println!("{:#?}", parse);
+    }
+    
+    #[test]
+    fn test_parse_file_unformatted() {
+        let file = include_str!("../test/mesmerizer.srv3.xml");
+        let parse = TimedText::from_str(file).unwrap();
+        
+        println!("{:#?}", parse);
+    }
 }
