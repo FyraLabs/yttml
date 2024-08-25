@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use hex_color::HexColor;
+use serde::{Deserialize, Serialize};
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "timedtext")]
 /// The TimedText struct is the root of the XML file.
@@ -26,9 +26,9 @@ pub struct Head {
 // but there's no documentation to go off of.
 // So I'll be guessing what they mean and renaming the fields
 // in code here to describe what I think they are.
-// 
+//
 // tfw proprietary XML schema
-// 
+//
 // todo: to anyone who knows what these fields are,
 // please PLEASE let me know what they are.
 
@@ -38,53 +38,51 @@ pub struct Pen {
     /// ID of pen
     pub id: u32,
 
-
     // --- Text styles ---
-    
     #[serde(rename = "@b")]
     /// Toggle bold style
     pub bold: Option<bool>,
-    
+
     #[serde(rename = "@i")]
     /// Toggle italic style
     pub italic: Option<bool>,
-    
+
     #[serde(rename = "@u")]
     /// Toggle underline style
     pub underline: Option<bool>,
-    
+
     /// Foreground color of the text
     #[serde(rename = "@fc")]
     pub foreground_color: Option<HexColor>,
-    
+
     /// Opacity of foreground color, has to be input separately
     /// because it's a separate attribute in the XML
-    /// 
+    ///
     /// If your Hex is RGBA your program should automatically separate the A value
     /// into this attribute
     #[serde(rename = "@fo")]
     pub foreground_opacity: Option<u32>,
-    
+
     /// Background color of the text
     #[serde(rename = "@bc")]
     pub background_color: Option<HexColor>,
-    
+
     /// Opacity of background color, has to be input separately
     /// because it's a separate attribute in the XML
-    /// 
+    ///
     /// If your Hex is RGBA your program should automatically separate the A value
     /// into this attribute
     #[serde(rename = "@bo")]
     pub background_opacity: Option<u32>,
-    
+
     /// Color of text outline/edge
     #[serde(rename = "@ec")]
     pub edge_color: Option<HexColor>,
-    
+
     /// Type of edge/outline of the text
     #[serde(rename = "@et")]
     pub edge_type: Option<u32>,
-    
+
     /// Text size
     #[serde(rename = "@sz")]
     pub font_size: Option<u32>,
@@ -92,23 +90,23 @@ pub struct Pen {
     #[serde(rename = "@fs")]
     /// Font style, is an enum?
     pub font_style: Option<FontStyle>,
-    
+
     #[serde(rename = "@rb")]
     /// Ruby text
-    /// 
+    ///
     /// Ruby text is a small annotation above or below the main text,
     /// typically used in East Asian typography since
     /// Chinese characters are logographic. Ruby text is used to clarify
     /// pronounciation or meaning of these glyphs.
-    /// 
+    ///
     /// Sometimes called "furigana" in Japanese and "bopomofo" in Chinese.
-    /// 
+    ///
     /// They can also sometimes be used in English text to clarify references
     /// to literary devices or other things, for example in the game Honkai Star Rail
     /// which makes extensive use of ruby text to clarify references to the game's lore.
-    /// 
+    ///
     /// This ruby field is an enum that specifies the type of ruby text.
-    /// 
+    ///
     /// This can be:
     /// - No ruby text
     /// - Base
@@ -116,8 +114,7 @@ pub struct Pen {
     /// - Before text
     /// - After text
     pub ruby: Option<RubyPart>,
-    
-    
+
     #[serde(rename = "@hg")]
     /// Packing of text
     pub packing: Option<u32>,
@@ -184,11 +181,10 @@ pub struct Body {
     pub elements: Vec<BodyElement>,
 }
 
-
 // --- The body ---
 // Finally, the body of the XML
 // the actual data we want to really parse
-// 
+//
 // It's a bunch of <p> tags with some attributes and inner text, kinda like HTML
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Paragraph {
@@ -200,7 +196,7 @@ pub struct Paragraph {
     pub timestamp: u64,
     #[serde(rename = "@d")]
     // duration??? what is this?
-    pub duration: u64,   
+    pub duration: u64,
 }
 
 // todo: make the thing like HTML
