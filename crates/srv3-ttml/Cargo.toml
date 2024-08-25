@@ -2,12 +2,23 @@
 name = "srv3-ttml"
 version = "0.1.0"
 edition = "2021"
-authors = ["Cappy Ishihara <cappy@fyralabs.com>"]
+license = "MIT"
+authors = [
+    "Cappy Ishihara <cappy@fyralabs.com>"
+]
 categories = [
     "parsing",
     "text-processing",
     "multimedia::video"
 ]
+keywords = [
+    "youtube",
+    "ttml",
+    "srv3",
+    "captions",
+    "subtitles"
+]
+repository = "https://github.com/FyraLabs/yttml"
 description = "Youtube-flavored TTML (SRV3) captioning format parser"
 [dependencies]
 hex_color = { version = "3.0.0", features = ["serde"] }
