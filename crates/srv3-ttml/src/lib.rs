@@ -367,6 +367,18 @@ pub struct Body {
     pub elements: Vec<BodyElement>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub struct Window {
+  #[serde(rename = "@id")]
+  pub id: u32,
+  #[serde(rename = "@t")]
+  pub time_millis: u32,
+  #[serde(rename = "@wp")]
+  pub window_position_id: u32,
+  #[serde(rename = "@ws")]
+  pub window_style_id: u32,
+}
+
 // --- The body ---
 // Finally, the body of the XML
 // the actual data we want to really parse
@@ -542,6 +554,8 @@ pub enum BodyElement {
     Br(Br),
     #[serde(rename = "div")]
     Div(Vec<Self>),
+    #[serde(rename = "w")]
+    Window(Window),
 }
 
 #[cfg(test)]
