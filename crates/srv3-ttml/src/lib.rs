@@ -1,6 +1,9 @@
+use std::str::FromStr;
 use hex_color::HexColor;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
+
+
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "timedtext")]
 /// The TimedText struct is the root of the XML file.
@@ -17,6 +20,14 @@ impl TimedText {
     }
 }
 
+impl FromStr for TimedText {
+    type Err = quick_xml::DeError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        quick_xml::de::from_str(s)
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Head {
     #[serde(rename = "pen")]
@@ -28,59 +39,64 @@ pub struct Head {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-// The value names here are not really descriptive,
-// but there's no documentation to go off of.
-// So I'll be guessing what they mean and renaming the fields
-// in code here to describe what I think they are.
-//
-// tfw proprietary XML schema
-//
-// todo: to anyone who knows what these fields are,
-// please PLEASE let me know what they are.
-
-// serde: do not add fields that are None
-/// Pen is a struct that contains the style of the text...?
+/// Pen is a variable that contains the style of the text
+/// similar to CSS classes
 pub struct Pen {
-    /// ID of pen
+    /// ID of pen.
+    /// 
+    /// The ID must be an incrementing integer starting from 1.
+    /// If the ID is not ordered, YouTube will re-order the IDs
+    /// causing body element assignments to be out of order.
     #[serde(rename = "@id")]
-    pub id: Option<u32>,
+    pub id: u32,
 
     // --- Text styles ---
     #[serde(rename = "@b")]
+    #[serde(default)]
     /// Toggle bold style
     pub bold: Option<bool>,
 
     #[serde(rename = "@i")]
+    #[serde(default)]
     /// Toggle italic style
     pub italic: Option<bool>,
 
     #[serde(rename = "@u")]
+    #[serde(default)]
     /// Toggle underline style
     pub underline: Option<bool>,
 
     /// Foreground color of the text
     #[serde(rename = "@fc")]
+    #[serde(default)]
     pub foreground_color: Option<HexColor>,
 
     /// Opacity of foreground color, has to be input separately
     /// because it's a separate attribute in the XML
+    /// 
+    /// Specifying 255 will result in attribute not being written
+    /// when uploading to YouTube.
     ///
     /// If your Hex is RGBA your program should automatically separate the A value
     /// into this attribute
+    /// 
     #[serde(rename = "@fo")]
+    #[serde(default)]
     pub foreground_opacity: Option<u32>,
 
     /// Background color of the text
     #[serde(rename = "@bc")]
+    #[serde(default)]
     pub background_color: Option<HexColor>,
 
     /// Opacity of background color, has to be input separately
-    /// because it's a separate attribute in the XML
+    /// because it's a separate attribute in the XML.
     ///
     /// If your Hex is RGBA your program should automatically separate the A value
     /// into this attribute
     #[serde(rename = "@bo")]
-    pub background_opacity: Option<u32>,
+    #[serde(default)]
+    pub background_opacity: Option<u8>,
 
     /// Color of text outline/edge
     #[serde(rename = "@ec")]
@@ -88,48 +104,106 @@ pub struct Pen {
 
     /// Type of edge/outline of the text
     #[serde(rename = "@et")]
-    pub edge_type: Option<u32>,
+    #[serde(default)]
+    pub edge_type: Option<EdgeType>,
 
     /// Text size
+    /// 
+    /// The value is a virtual percentage of the default size; the real 
+    /// percentage is 100 + (sz - 100) / 4, meaning 200 will result
+    /// in a 125% font size.
+    /// 
+    /// The smallest value is 0 which results in 75% font size.
     #[serde(rename = "@sz")]
+    #[serde(default)]
     pub font_size: Option<u32>,
 
     #[serde(rename = "@fs")]
-    /// Font style, is an enum?
+    #[serde(default)]
+    /// Font style, see `FontStyle` for more information
     pub font_style: Option<FontStyle>,
 
     #[serde(rename = "@rb")]
-    /// Ruby text
-    ///
-    /// Ruby text is a small annotation above or below the main text,
-    /// typically used in East Asian typography since
-    /// Chinese characters are logographic. Ruby text is used to clarify
-    /// pronounciation or meaning of these glyphs.
-    ///
-    /// Sometimes called "furigana" in Japanese and "bopomofo" in Chinese.
-    ///
-    /// They can also sometimes be used in English text to clarify references
-    /// to literary devices or other things, for example in the game Honkai Star Rail
-    /// which makes extensive use of ruby text to clarify references to the game's lore.
-    ///
-    /// This ruby field is an enum that specifies the type of ruby text.
-    ///
-    /// This can be:
-    /// - No ruby text
-    /// - Base
-    /// - Parentheses
-    /// - Before text
-    /// - After text
-    pub ruby: Option<RubyPart>,
+    #[serde(default)]
+    /// Ruby style, see `RubyStyle` for more information
+    pub ruby: Option<RubyStyle>,
 
     #[serde(rename = "@hg")]
+    #[serde(default)]
     /// Packing of text
+    /// 
+    /// Only supports value of 1, not supported on mobile players.
     pub packing: Option<u32>,
+    
+    #[serde(rename = "@of")]
+    #[serde(default)]
+    /// "Offset" of text.
+    /// This is actually mislabeled, since this
+    /// sets the vertical offset of the text (Subscript/Superscript)
+    pub text_offset: Option<TextOffset>,
+    
+    #[serde(rename = "@te")]
+    #[serde(default)]
+    /// Text emphasis, see `TextEmphasis` for more information
+    /// 
+    /// This is used to allow or disallow bold text from being
+    /// displayed.
+    pub text_emphasis: Option<TextEmphasis>,
+}
+
+
+
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum Justify {
+    Left = 0,
+    Right = 1,
+    Center = 2,
 }
 
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
-#[repr(u32)]
-pub enum RubyPart {
+#[repr(u8)]
+pub enum TextEmphasis {
+    /// Allow bold text
+    Allow = 1,
+    /// Disallow bold text
+    Deny = 2,
+}
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum TextOffset {
+    Superscript = 1,
+    Subscript = 2,
+}
+
+
+/// Ruby text
+///
+/// Ruby text is a small annotation above or below the main text,
+/// typically used in East Asian typography since
+/// Chinese characters are logographic. Ruby text is used to clarify
+/// pronounciation or meaning of these glyphs.
+///
+/// Sometimes called "furigana" in Japanese and "bopomofo" in Chinese.
+///
+/// They can also sometimes be used in English text to clarify references
+/// to literary devices or other things, for example in the game Honkai Star Rail
+/// which makes extensive use of ruby text to clarify references to the game's lore.
+///
+/// This ruby type is an enum that specifies the type of ruby text.
+///
+/// This can be:
+/// - No ruby text
+/// - Base
+/// - Parentheses
+/// - Before text
+/// - After text
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum RubyStyle {
+    #[serde(default)]
     None = 0,
     Base = 1,
     Parenthesis = 2,
@@ -137,27 +211,64 @@ pub enum RubyPart {
     AfterText = 5,
 }
 
+/// Type of edge/outline of text
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
-#[repr(u32)]
+#[repr(u8)]
+pub enum EdgeType {
+    None = 0,
+    HardShadow = 1,
+    Bevel = 2,
+    Glow = 3,
+    SoftShadow = 4,
+}
+
+
+#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
 pub enum FontStyle {
-    CourierNew = 1,
-    TimesNewRoman = 2,
-    LucidaConsole = 3,
-    ComicSans = 5,
-    MonotypeCorsiva = 6,
-    CarriosGothic = 7,
-    #[serde(other)]
-    Roboto = 0,
+    #[serde(default)]
+    /// Default font style.
+    /// Implicitly defaults to Proportional Sans (Roboto)
+    Default = 0, 
+    /// Monospace Serif.
+    /// Courier New
+    MonoSerif = 1, 
+    /// Proportional Serif.
+    /// Times New Roman
+    ProportionalSerif = 2,
+    /// Monospace Sans.
+    /// Lucida Console
+    MonoSans = 3,
+    /// Proportional Sans.
+    /// Roboto, same as default setting but explicit
+    ProportionalSans = 4,
+    /// Casual.
+    /// Comic Sans
+    Casual = 5,
+    /// Cursive.
+    /// Monotype Corsiva
+    Cursive = 6,
+    /// Small Capitals.
+    /// Arial with `font-variant: small-caps`
+    SmallCaps = 7
 }
 
 impl Default for FontStyle {
     fn default() -> Self {
-        FontStyle::Roboto
+        FontStyle::Default
     }
 }
 
+/// Point to anchor text to
+/// ```dot
+/// 0 ======== 1 ======== 2
+/// |          |          |
+/// 3          4          5
+/// |          |          |
+/// 6 ======== 7 ======== 8
+/// ```
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
-#[repr(u32)]
+#[repr(u8)]
 pub enum AnchorPoint {
     TopLeft = 0,
     TopCenter = 1,
@@ -182,23 +293,36 @@ pub struct WindowPosition {
     /// Is an enum which specify which corner of the screen the text is anchored to.
     pub anchor_point: Option<AnchorPoint>,
 
+    // The server only accepts integers for "ah" and "av", even though the player accepts floating point.
+    // In theater mode, the width covered by "ah" includes the black bars on the sides, meaning the
+    // subtitles move towards the sides and even out of the video.
+    // The player transforms the coordinates according to effectiveCoord = (specifiedCoord * 0.96) + 2,
+    // meaning subtitles don't appear *quite* where you want them to
+    
     /// X position from anchor point
     #[serde(rename = "@ah")]
-    pub anchor_horizontal: Option<i32>,
+    pub horizontal_offset: Option<i32>,
 
     /// Y position from anchor point
     #[serde(rename = "@av")]
-    pub anchor_vertical: Option<i32>,
+    pub vertical_offset: Option<i32>,
+
+    #[serde(default, rename = "@rc")]
+    pub rows_total: Option<u8>,
+    /// Each column has en-dash width
+    #[serde(default, rename = "@cc")]
+    pub columns_total: Option<u8>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "ws")]
 pub struct WindowStyle {
+    /// ID of window style
     #[serde(rename = "@id")]
     pub id: u32,
     #[serde(rename = "@ju")]
-    /// Reference to anchor point to justify text???
-    pub justify: Option<u32>,
+    /// Justification of text
+    pub justify: Option<Justify>,
 
     // todo: Both of these should be an enum of 0-3 but I don't know what to name them
     /// Pitch direction of text (vertical tilt)
@@ -208,7 +332,24 @@ pub struct WindowStyle {
     /// Yaw (skew) direction of text (horizontal tilt)
     #[serde(rename = "@sd")]
     pub skew_direction: Option<Rotation>,
+    
+    #[serde(default, rename = "@mh")]
+    pub mode_hint: ModeHint,
+    #[serde(default, rename = "@wfc")]
+    pub fill_color: Option<String>,
+    #[serde(default, rename = "@wfo")]
+    pub fill_opacity: Option<u8>,
 }
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize_repr, Deserialize_repr)]
+#[repr(u8)]
+pub enum ModeHint {
+  #[default]
+  None = 0,
+  Default = 1,
+  Scroll = 2,
+}
+
 
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
@@ -238,7 +379,10 @@ pub struct Paragraph {
     #[serde(rename = "$value")]
     // Always treat the inner text as string
     pub inner: Vec<BodyElement>,
-    /// Timestamp on when to display the caption
+    /// Timestamp on when to display the caption in milliseconds
+    /// 
+    /// A timestamp of 0 should be avoided as on Android the positioning will be ignored
+    /// and even not displayed at all in some cases.
     #[serde(rename = "@t")]
     pub timestamp: u64,
     /// Duration to display the caption for
@@ -367,29 +511,7 @@ impl ElementExt for Span {
 
     // text_markup: wrap in <s> tags
     fn text_markup(&self) -> String {
-        // todo: possibly turn this into something that iterates through all the fields
-        // and add to attribute, but for now this is fine since it's supposed
-        // to be used for debug
-        //
-        // serialization of YTT should be done with serde, not this.
-        let start_tag = format!(
-            "<s{}>",
-            self.pen
-                .map_or(String::new(), |pen| format!(" p=\"{}\"", pen))
-        );
-        let end_tag = "</s>";
-
-        let inner_text = self
-            .inner
-            .as_ref()
-            .map(|inner_elements| {
-                inner_elements
-                    .iter()
-                    .fold(String::new(), |acc, elem| acc + &elem.text_markup())
-            })
-            .unwrap_or_default();
-
-        format!("{}{}{}", start_tag, inner_text, end_tag)
+        quick_xml::se::to_string(&self).unwrap()
     }
 }
 
@@ -425,29 +547,29 @@ pub enum BodyElement {
 #[cfg(test)]
 mod tests {
     use super::*;
+    
+    fn test_parse(s: &str) {
+        let parse = TimedText::from_str(s).unwrap();
+        println!("\n{:#?}\n", parse);
+        let t = parse.body.elements.text();
+        println!("{}", t);
+        
+        let xml = quick_xml::se::to_string(&parse).unwrap();
+        println!("```xml\n{}\n```", xml);
+        
+    }
 
     // TODO: So formatted files with <s> tags inside the <p> tags are not parsed correctly
     // We want to treat them literally as <s> tags, not as a separate element
     #[test]
     fn test_parse_file() {
         let file = include_str!("../test/aishite.srv3");
-        let parse = TimedText::from_str(file).unwrap();
-
-        println!("{:#?}", parse);
-
-        let t = parse.body.elements.text();
-
-        println!("{}", t);
+        test_parse(file);
     }
 
     #[test]
     fn test_parse_file_unformatted() {
         let file = include_str!("../test/mesmerizer.srv3.xml");
-        let parse = TimedText::from_str(file).unwrap();
-
-        println!("{:#?}", parse);
-        let t = parse.body.elements.text();
-
-        println!("{}", t);
+        test_parse(file);
     }
 }

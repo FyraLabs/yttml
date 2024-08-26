@@ -12,44 +12,43 @@ content, it has a few unique elements and attributes.
 
 The structure of a YTT file is as follows:
 
-- Header tag (`<head>`)
-  - Pens (`<pen>`)
-    A pen is a variable to store a style for text. It can
-    be referenced by a span to apply the style to the text, similar to
-    the HTML `class` attribute. Pens are defined in the header section
-    of the file, and referenced in the body inside a span as `p="<pen_id>"`.
-  - Window styles (`<ws>`)
-    A window style is a variable to store a style for the
-    text "window" (the box that contains the text).
-  - Window positions (`<wp>`)
-    A window position is a variable to store the position
-    of the text window on the screen, anchored to a specific corner of the
-    screen, with X and Y offsets defined as `(ah, av)`.
-- Body tag (`<body>`)
-  - Lines (`<p>`)
-    A line is a block of text that appears on the screen
-    at a specific time, with a specific duration, at a specific position
-    and with a specific style. The text content of the line is stored
-    as the inner text of the `<p>` tag.
-    - Spans (`<s>`)
-      A span is a block of text with a specific style
-      applied to it. Spans can be used to apply different styles to
-      different parts of the text within a line. You can reference a pen
-      style by using the `p="<pen_id>"` attribute on the span tag.
-    - Breaks (`<br>`)
-      A break is a line break within a line of text. It
-      is used to split a line of text into multiple lines.
-        
+-   Header tag (`<head>`)
+    -   Pens (`<pen>`)
+        A pen is a variable to store a style for text. It can
+        be referenced by a span to apply the style to the text, similar to
+        the HTML `class` attribute. Pens are defined in the header section
+        of the file, and referenced in the body inside a span as `p="<pen_id>"`.
+    -   Window styles (`<ws>`)
+        A window style is a variable to store a style for the
+        text "window" (the box that contains the text).
+    -   Window positions (`<wp>`)
+        A window position is a variable to store the position
+        of the text window on the screen, anchored to a specific corner of the
+        screen, with X and Y offsets defined as `(ah, av)`.
+-   Body tag (`<body>`)
+    -   Lines (`<p>`)
+        A line is a block of text that appears on the screen
+        at a specific time, with a specific duration, at a specific position
+        and with a specific style. The text content of the line is stored
+        as the inner text of the `<p>` tag.
+        -   Spans (`<s>`)
+            A span is a block of text with a specific style
+            applied to it. Spans can be used to apply different styles to
+            different parts of the text within a line. You can reference a pen
+            style by using the `p="<pen_id>"` attribute on the span tag.
+        -   Breaks (`<br>`)
+            A break is a line break within a line of text. It
+            is used to split a line of text into multiple lines.
+
 All the above data is then wrapped inside a `<timedtext>` tag.
 
 ## Differences from TTML
 
-- `<tt>` is replaced by `<timedtext>`.
-- Pen styles are styles for text. They are referenced by spans to be applied.
-- Window styles can be used to style the text window.
-- Custom window positioning using window position variables.
-- Ruby text support.
-
+-   `<tt>` is replaced by `<timedtext>`.
+-   Pen styles are styles for text. They are referenced by spans to be applied.
+-   Window styles can be used to style the text window.
+-   Custom window positioning using window position variables.
+-   Ruby text support.
 
 ## TTML Tags
 
@@ -76,8 +75,8 @@ A variable declared to store a position for a window onscreen.
 ```
 id: enum = Position ID
 ap: enum = Anchor point
-ah: int = X location
-av: int  = Y location
+ah: int = X offset (0-100)
+av: int  = Y offset (0-100)
 ```
 
 ### ws
@@ -113,6 +112,8 @@ fc: hex = Foreground color
 fo: int = Foreground opacity
 bc: hex = Background color
 bo: int = Background opacity
+ec: hex = Shadow (edge) color
+et: enum = Shadow (edge) type
 rb: enum = Ruby text (0-5)
 hg: bool = Packed text
 ```
@@ -124,7 +125,6 @@ The body section of the YTT file. Contains the lines of text to be displayed.
 ### p
 
 A line of text to be displayed on the screen.
-
 
 #### Fields
 
@@ -161,17 +161,18 @@ ws: enum = window style ID
 1 - Base
 2 - Parentheses
 4 - Before text
-5 - After text 
+5 - After text
 
 ### Font style (`fs`)
 
-1 - Courier New, Courier, Nimbus Mono 1, Cutive Mono
-2 - Times New Roman, Georgia, Cambria, PT Serif Caption
-3 - Lucida Console, DejaVu Sans Mono, Monaco, Consolas, PT Mono
-5 - Comic Sans MS, Impact, Handlee
-6 - Monotype Corsiva, URW Chancery 1, Apple Chancery, Dancing Script
-7 - Carrois Gothic SC
-0 - Default system font
+0 - Default font (Roboto)
+1 - Monospace Serif (Courier New)
+2 - Proportional Serif (Times New Roman)
+3 - Monospace Sans (Lucida Console)
+4 - Proportional Sans (Roboto)
+5 - Casual (Comic Sans MS)
+6 - Cursive (Monotype Corsiva)
+7 - Small Capitals (Arial with font-variant small-caps)
 
 ### Pitch (`pd`) & Yaw/Skew (`sd`)
 
@@ -181,3 +182,28 @@ These are used to set the pitch and yaw of the text window.
 2,1 - Characters above each other, columns left to right
 3,0 - Subtitle rotated 90° CCW, columns left to right
 3,1 - Subtitle rotated 90° CCW, columns right to left
+
+### Offset (superscript/subscript) (`of`)
+
+0 - Subscript
+1 - Normal
+2 - Superscript
+
+### Edge/Shadow type (`et`)
+
+0 - No shadow
+1 - Hard shadow
+2 - Beveled shadow
+3 - Glow/Outline
+4 - Soft shadow
+
+## Issues
+
+-   Android does not support foreground opacity (`fo`).
+-   Android and iOS do not support custom backgrounds (`bc` & `bo`).
+-   Android and iOS do not support edge color (`ec` & `et`).
+-   Android and iOS do not support custom fonts (`fs`).
+-   Android does not support font sizes (`sz`).
+-   Android and iOS do not support ruby text (`rb`).
+-   Android and iOS do not support subscript/superscript (`of`).
+-   Android and iOS do not support vertical text alignment (`pd` & `sd`).
