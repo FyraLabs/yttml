@@ -449,6 +449,7 @@ impl ElementExt for BodyElement {
             BodyElement::Div(x) => x.text(),
             BodyElement::Span(x) => x.text(),
             Self::Paragraph(x) => x.text(),
+            _ => String::new(),
         }
     }
 }
