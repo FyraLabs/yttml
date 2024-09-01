@@ -561,6 +561,8 @@ pub enum BodyElement {
 
 #[cfg(test)]
 mod tests {
+    use serde::de::value;
+
     use super::*;
     
     fn test_parse(s: &str) {
