@@ -59,7 +59,7 @@ Documentation for the SRV3 format can be found [here](crates/srv3-ttml/internals
 
 ### Example videos showcasing the capabilities of the SRV3 format
 
-- [PinocchioP - Anonymous M](https://youtu.be/yiqEEL7ac6M) (`Thai - animation` caption track)
+- [PinocchioP - Anonymous M](https://youtu.be/yiqEEL7ac6M) (en-US caption track)
 - [Shinra-bansho - Aria on the line of fate MV](https://youtu.be/AYpVrYFg5uo)
   [![Example image](docs/assets/aria.png)](https://youtu.be/AYpVrYFg5uo)
 - [Kizuna AI - AIAIAI MV](https://youtu.be/S8dmq5YIUoc)
