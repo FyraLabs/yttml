@@ -1,3 +1,6 @@
+use std::fs::File;
+use std::io::Write;
+use std::path::Path;
 use std::str::FromStr;
 
 use clap::Parser;
@@ -22,6 +25,16 @@ enum OutputFormat {
     Yaml,
     /// VTT format
     Vtt,
+    /// SRT format
+    Srt,
+}
+
+#[derive(clap::ValueEnum, Debug, Clone, Copy)]
+enum SaveLocation {
+    /// Print the converted subtitles to stdout
+    Stdout,
+    /// Save the converted subtitles to a file
+    File,
 }
 
 // subcommands
@@ -37,30 +50,61 @@ enum SubCommand {
         /// Output format
         #[clap(short, long, default_value = "json")]
         format: OutputFormat,
+
+        /// Save to file or print to stdout
+        #[clap(short, long, default_value = "stdout")]
+        save: SaveLocation,
+
+        /// File path to save the output file to
+        #[clap(short, long, default_value = "")]
+        output: String,
     },
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
     match args.subcmd {
-        SubCommand::Parse { input, format } => {
+        SubCommand::Parse {
+            input,
+            format,
+            save,
+            output,
+        } => {
             println!("Parsing file: {}", input);
 
-            let file = std::fs::read_to_string(input)?;
+            let file = std::fs::read_to_string(&input)?;
 
             let captions = srv3_ttml::TimedText::from_str(&file)?;
 
             // println!("Parsed captions: {:?}", captions);
 
-            match format {
-                OutputFormat::Json => {
-                    println!("{}", serde_json::to_string_pretty(&captions)?);
-                }
-                OutputFormat::Yaml => {
-                    println!("{}", serde_yml::to_string(&captions)?);
-                }
-                OutputFormat::Vtt => {
-                    println!("{}", srv3tovtt_crate::to_vtt(&captions)?);
+            let w = match format {
+                OutputFormat::Json => serde_json::to_string_pretty(&captions)?,
+                OutputFormat::Yaml => serde_yml::to_string(&captions)?,
+                OutputFormat::Vtt => srv3tovtt_crate::to_vtt(&captions)?,
+                OutputFormat::Srt => srv3tovtt_crate::to_srt(&captions)?,
+            };
+            match save {
+                SaveLocation::Stdout => println!("{}", w),
+                SaveLocation::File => {
+                    if output.is_empty() {
+                        let file_stem = Path::new(&input)
+                            .file_stem()
+                            .and_then(|s| s.to_str())
+                            .unwrap_or_default();
+                        let extension = format!("{:?}", format).to_lowercase();
+                        let mut outputfile =
+                            File::create(format!("./{}.{}", file_stem, extension))?; //if the user doesnt specify the output directory, but wants to save to file, output it with the same name and correct extension to working directory.
+                        writeln!(&mut outputfile, "{}", w)?;
+                        println!(
+                            "Successfully wrote subtitles to ./{}.{}",
+                            file_stem, extension
+                        );
+                    } else {
+                        let mut outputfile = File::create(&output)?;
+                        writeln!(&mut outputfile, "{}", w)?;
+                        println!("Successfully wrote subtitles to {}", output);
+                    }
                 }
             }
         }
