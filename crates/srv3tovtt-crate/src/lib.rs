@@ -1,8 +1,8 @@
-use std::fmt::Write;
-
 pub use aspasia::timing::Moment;
 use serde::{Deserialize, Serialize};
 use srv3_ttml::BodyElement;
+use std::fmt::Write;
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Paragraph {
@@ -69,3 +69,10 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
     }
     Ok(w)
 }
+
+pub fn to_srt(captions: &srv3_ttml::TimedText) -> Result<String, Box<dyn std::error::Error>> {
+    let vtt = to_vtt(captions)?;
+    let vtt_subtitle = aspasia::WebVttSubtitle::from_str(&vtt)?;
+    let srt_subtitle = aspasia::SubRipSubtitle::from(&vtt_subtitle);
+    Ok(srt_subtitle.to_string())
+} // Kind of a hacky solution, but because SubRip doesn't offer anything extra over WebVTT, it is plausible
