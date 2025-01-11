@@ -81,8 +81,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let w = match format {
                 OutputFormat::Json => serde_json::to_string_pretty(&captions)?,
                 OutputFormat::Yaml => serde_yml::to_string(&captions)?,
-                OutputFormat::Vtt => srv3tovtt_crate::to_vtt(&captions)?,
-                OutputFormat::Srt => srv3tovtt_crate::to_srt(&captions)?,
+                OutputFormat::Vtt => srv3tovtt_crate::to_vtt(&captions)?.to_string(),
+                OutputFormat::Srt => srv3tovtt_crate::to_srt(&captions)?.to_string(),
             };
             match save {
                 SaveLocation::Stdout => println!("{}", w),

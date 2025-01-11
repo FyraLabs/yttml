@@ -1,4 +1,5 @@
 pub use aspasia::timing::Moment;
+use aspasia::{SubRipSubtitle, WebVttSubtitle};
 use serde::{Deserialize, Serialize};
 use srv3_ttml::BodyElement;
 use std::fmt::Write;
@@ -39,7 +40,7 @@ impl ElementExt for Vec<BodyElement> {
     }
 }
 
-pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
+pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle> {
     let paragraph = &captions.body.elements;
     let mut w = String::new();
     writeln!(&mut w, "WEBVTT").unwrap();
@@ -67,12 +68,13 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
             BodyElement::Window(_window) => {}
         }
     }
-    Ok(w)
+    Ok(aspasia::WebVttSubtitle::from_str(&w).unwrap())
 }
 
-pub fn to_srt(captions: &srv3_ttml::TimedText) -> Result<String, Box<dyn std::error::Error>> {
+pub fn to_srt(
+    captions: &srv3_ttml::TimedText,
+) -> Result<SubRipSubtitle, Box<dyn std::error::Error>> {
     let vtt = to_vtt(captions)?;
-    let vtt_subtitle = aspasia::WebVttSubtitle::from_str(&vtt)?;
-    let srt_subtitle = aspasia::SubRipSubtitle::from(&vtt_subtitle);
-    Ok(srt_subtitle.to_string())
+    let srt = aspasia::SubRipSubtitle::from(&vtt);
+    Ok(srt)
 } // Kind of a hacky solution, but because SubRip doesn't offer anything extra over WebVTT, it is plausible
