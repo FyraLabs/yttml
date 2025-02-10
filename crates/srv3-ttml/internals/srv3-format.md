@@ -140,61 +140,92 @@ ws: enum = window style ID
 ### AnchorPoint (`ap`)
 
 0 - Top Left
+
 1 - Top Center
+
 2 - Top Right
+
 3 - Middle Left
+
 4 - Center
+
 5 - Middle Right
+
 6 - Bottom Left
+
 7 - Bottom Center
+
 8 - Bottom Right
 
 ### Justification (`ju`)
 
 0 - Top Left, Middle Left, Bottom Left
+
 1 - Top Right, Middle Right, Bottom Right
+
 2 - Top Center, Center, Bottom Center
 
 ### Ruby text (`rb`)
 
 0 - No ruby text
+
 1 - Base
+
 2 - Parentheses
+
 4 - Before text
+
 5 - After text
 
 ### Font style (`fs`)
 
 0 - Default font (Roboto)
+
 1 - Monospace Serif (Courier New)
+
 2 - Proportional Serif (Times New Roman)
+
 3 - Monospace Sans (Lucida Console)
+
 4 - Proportional Sans (Roboto)
+
 5 - Casual (Comic Sans MS)
+
 6 - Cursive (Monotype Corsiva)
+
 7 - Small Capitals (Arial with font-variant small-caps)
+
 
 ### Pitch (`pd`) & Yaw/Skew (`sd`)
 
 These are used to set the pitch and yaw of the text window.
 
 2,0 - Characters above each other, columns right to left
+
 2,1 - Characters above each other, columns left to right
+
 3,0 - Subtitle rotated 90° CCW, columns left to right
+
 3,1 - Subtitle rotated 90° CCW, columns right to left
 
 ### Offset (superscript/subscript) (`of`)
 
 0 - Subscript
+
 1 - Normal
+
 2 - Superscript
 
 ### Edge/Shadow type (`et`)
 
 0 - No shadow
+
 1 - Hard shadow
+
 2 - Beveled shadow
+
 3 - Glow/Outline
+
 4 - Soft shadow
 
 ## Issues
