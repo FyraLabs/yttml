@@ -2,7 +2,10 @@
 name = "srv3tovtt-crate"
 version = "0.1.0"
 edition = "2021"
-
+authors = [
+    "Cappy Ishihara <cappy@fyralabs.com>",
+    "Eri Ishihara <eri@nijika.dev>",
+]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

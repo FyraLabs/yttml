@@ -133,7 +133,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
     // like the black bgcolor or something like that (&H000000)
     // this is to make the resulting file nice and small
     let style = "Default";
-    let font = "Arial";
+    let font = "Roboto";
     let fontsize = "16";
     let primarycolour = "&Hffffff";
     let secondarycolour = "&Hffffff";
@@ -270,7 +270,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
         }
     }
 
-    println!("{}", w);
+    //println!("{}", w);
     Ok(aspasia::AssSubtitle::from_str(&w).unwrap())
 }
 
