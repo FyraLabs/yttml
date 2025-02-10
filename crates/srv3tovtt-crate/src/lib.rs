@@ -238,9 +238,13 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
                                .map(|color| hex_to_ass_color(color))
                                .unwrap_or_else(|| String::from("&H000000"));
 
+                            let fg_color = pen.and_then(|pen| pen.foreground_color.as_ref())
+                               .map(|color| hex_to_ass_color(color))
+                               .unwrap_or_else(|| String::from("&HFFFFFF"));
+
                             writeln!(
                                 &mut w,
-                                "Dialogue: {},{},{},{},{},{},{},{},{},{{\\3c{}}}{}",
+                                "Dialogue: {},{},{},{},{},{},{},{},{},{{\\3c{}}}{{\\1c{}}}{}",
                                 layer,
                                 aspasia::timing::Moment::as_substation_timestamp(
                                     &aspasia::timing::Moment::from(paragraph.timestamp as i64)
@@ -255,6 +259,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
                                 marginv,
                                 effect,
                                 bg_color,
+                                fg_color,
                                 paragraph.inner.text()
                             ).unwrap();
                         }
