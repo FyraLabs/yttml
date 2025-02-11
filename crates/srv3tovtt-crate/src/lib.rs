@@ -1,7 +1,7 @@
 pub use aspasia::timing::Moment;
 use aspasia::{SubRipSubtitle, WebVttSubtitle, AssSubtitle};
 use serde::{Deserialize, Serialize};
-use srv3_ttml::BodyElement;
+use srv3_ttml::{BodyElement, AnchorPoint};
 use std::fmt::Write;
 use std::str::FromStr;
 use hex_color::*;
@@ -90,6 +90,29 @@ impl ElementExt for Vec<BodyElement> {
             .join("")
             .trim()
             .to_string()
+    }
+}
+
+// this will get the anchorpoint (ap) position from the srv3 and
+// convert it to coordinates from ass
+// all with a 10px margin to the 384x288 display space
+
+pub trait AnchorPointExt {
+    fn coordinates(&self) -> (i32, i32);
+}
+impl AnchorPointExt for AnchorPoint {
+    fn coordinates(&self) -> (i32, i32) {
+        match self {
+            AnchorPoint::TopLeft => (10, 10),
+            AnchorPoint::TopCenter => (192, 10),
+            AnchorPoint::TopRight => (374, 10),
+            AnchorPoint::MiddleLeft => (10, 144),
+            AnchorPoint::Center => (192, 144),
+            AnchorPoint::MiddleRight => (374, 144),
+            AnchorPoint::BottomLeft => (10, 278),
+            AnchorPoint::BottomCenter => (192, 278),
+            AnchorPoint::BottomRight => (374, 278),
+        }
     }
 }
 
@@ -183,8 +206,40 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
     writeln!(&mut w, "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text").unwrap();
 
     for element in paragraph {
+        //println!("{:?}", element);
         match element {
             BodyElement::Paragraph(paragraph) => {
+                let position_str = if let Some(wp_id) = paragraph.window_position {
+                    if let Some(head) = &captions.head {
+                        if let Some(wp) = head.wp.iter().find(|wp| wp.id == wp_id) {
+                            if let Some(ap) = &wp.anchor_point {
+                                let (base_x, base_y) = ap.coordinates();
+                                // i added +50 and -45 to move the positioning properly
+                                // in aishite, this might be a horrible broken hack but
+                                // we will see
+                                let y = if let Some(av) = wp.vertical_offset {
+                                    ((base_y + av + 50) as f32 * 0.96 + 2.0) as i32
+                                } else {
+                                    (base_y as f32 * 0.96 + 2.0) as i32
+                                };
+                                let x = if let Some(ah) = wp.horizontal_offset {
+                                    ((base_x + ah - 45) as f32 * 0.96 + 2.0) as i32
+                                } else {
+                                    (base_x as f32 * 0.96 + 2.0) as i32
+                                };
+                                format!("{{\\pos({},{})}}", x, y)
+                            } else {
+                                String::new()
+                            }
+                        } else {
+                            String::new()
+                        }
+                    } else {
+                        String::new()
+                    }
+                } else {
+                    String::new()
+                };
                 if !has_pens {
                     writeln!(
                         &mut w,
@@ -244,7 +299,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
 
                             writeln!(
                                 &mut w,
-                                "Dialogue: {},{},{},{},{},{},{},{},{},{{\\3c{}}}{{\\1c{}}}{}",
+                                "Dialogue: {},{},{},{},{},{},{},{},{},{}{{\\3c{}}}{{\\1c{}}}{}",
                                 layer,
                                 aspasia::timing::Moment::as_substation_timestamp(
                                     &aspasia::timing::Moment::from(paragraph.timestamp as i64)
@@ -258,6 +313,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
                                 marginr,
                                 marginv,
                                 effect,
+                                position_str,
                                 bg_color,
                                 fg_color,
                                 paragraph.inner.text()
