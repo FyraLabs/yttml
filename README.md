@@ -59,7 +59,8 @@ Documentation for the SRV3 format can be found [here](crates/srv3-ttml/internals
 
 ### Example videos showcasing the capabilities of the SRV3 format
 
-- [PinocchioP - Anonymous M](https://youtu.be/yiqEEL7ac6M) (en-US caption track)
+- [Nayutalien feat. Various Artists - Dance Robot Dance MV (Megacollab)](https://youtu.be/Vb-z6AR-2F0)
+  [![Example image](docs/assets/dancerobotdance.png)](https://youtu.be/Vb-z6AR-2F0)
 - [Shinra-bansho - Aria on the line of fate MV](https://youtu.be/AYpVrYFg5uo)
   [![Example image](docs/assets/aria.png)](https://youtu.be/AYpVrYFg5uo)
 - [Kizuna AI - AIAIAI MV](https://youtu.be/S8dmq5YIUoc)
