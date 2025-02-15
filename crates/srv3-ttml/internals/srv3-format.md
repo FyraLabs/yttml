@@ -79,6 +79,8 @@ ah: int = X offset (0-100)
 av: int  = Y offset (0-100)
 ```
 
+**IMPORTANT:** `ah` and `av` are in percentage, not pixels
+
 ### ws
 
 A variable to store a style for the text window.
