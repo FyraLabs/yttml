@@ -300,18 +300,6 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                .map(|color| hex_to_ass_color(color))
                                .unwrap_or_else(|| String::from("&HFFFFFF"));
 
-                            let font_size = pen.and_then(|pen| pen.font_size)
-                                .map(|size| {
-                                    let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
-                                    let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
-                                    format!("\\fs{}", relative_size)
-
-                                    // not sure if it was a good idea to hardcode 38 here,
-                                    // but seeing that all of the styles have
-                                    // 38 anyway, it should be ok
-                                })
-                                .unwrap_or_default();
-
                             let font_family = pen.and_then(|pen| pen.font_style.as_ref())
                                 .map(|fs| match fs {
                                     FontStyle::Default | FontStyle::ProportionalSans => "\\fnRoboto",
@@ -323,24 +311,50 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                     FontStyle::SmallCaps => "\\fnArial",
                                 })
                                 .unwrap_or_default();
-                            let style = if let Some(pen_id) = text_span_pen_id {
-                                if let Some(pen) = head.pen.iter().find(|pen| pen.id == pen_id) {
-                                    match pen.edge_type {
-                                        Some(EdgeType::HardShadow) => "YTHardShadow",
-                                        Some(EdgeType::Bevel) => "YTBevel",
-                                        Some(EdgeType::Glow) => "YTGlow",
-                                        Some(EdgeType::SoftShadow) => "YTSoftShadow",
-                                        Some(EdgeType::None) | None => "YTGlow"  // default to YTGlow for None or EdgeType::None
-                                    }
-                                } else {
-                                    "YTGlow"
+
+                            let style = if let Some(pen) = pen {
+                                match pen.edge_type {
+                                    Some(EdgeType::HardShadow) => "YTHardShadow",
+                                    Some(EdgeType::Bevel) => "YTBevel",
+                                    Some(EdgeType::Glow) => "YTGlow",
+                                    Some(EdgeType::SoftShadow) => "YTSoftShadow",
+                                    Some(EdgeType::None) | None => "YTGlow"
                                 }
                             } else {
                                 "YTGlow"
                             };
+
+                            // process each span with its own font size
+                            let formatted_text = paragraph.inner.iter().map(|elem| {
+                                if let BodyElement::Span(span) = elem {
+                                    if let Some(span_pen_id) = span.pen {
+                                        if let Some(span_pen) = head.pen.iter().find(|p| p.id == span_pen_id) {
+                                            // get font size for the correct span
+                                            let size_tag = span_pen.font_size.map(|size| {
+                                                let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
+                                                let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
+                                                format!("{{\\fs{}}}", relative_size)
+
+                                                // not sure if it was a good idea to hardcode 38 here,
+                                                // but seeing that all of the styles have
+                                                // 38 anyway, it should be ok
+                                            }).unwrap_or_default();
+
+                                            format!("{}{}", size_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text()))
+                                        } else {
+                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text())
+                                        }
+                                    } else {
+                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text())
+                                    }
+                                } else {
+                                    elem.text()
+                                }
+                            }).collect::<String>();
+
                             writeln!(
                                 &mut w,
-                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3c{}\\1c{}{}{}}}{}",
+                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3c{}\\1c{}{}}}{}",
                                 layer,
                                 aspasia::timing::Moment::as_substation_timestamp(
                                     &aspasia::timing::Moment::from(paragraph.timestamp as i64)
@@ -358,8 +372,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                 bg_color,
                                 fg_color,
                                 font_family,
-                                font_size,
-                                paragraph.inner.text()
+                                formatted_text
                             ).unwrap();
                         }
                     }
