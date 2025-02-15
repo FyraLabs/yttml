@@ -95,7 +95,6 @@ impl ElementExt for Vec<BodyElement> {
 
 // this will get the anchorpoint (ap) position from the srv3 and
 // convert it to coordinates from ass
-// all with a 10px margin to the 384x288 display space
 
 pub trait AnchorPointExt {
     fn coordinates(&self) -> (i32, i32);
@@ -103,15 +102,15 @@ pub trait AnchorPointExt {
 impl AnchorPointExt for AnchorPoint {
     fn coordinates(&self) -> (i32, i32) {
         match self {
-            AnchorPoint::TopLeft => (10, 10),
-            AnchorPoint::TopCenter => (192, 10),
-            AnchorPoint::TopRight => (374, 10),
-            AnchorPoint::MiddleLeft => (10, 144),
-            AnchorPoint::Center => (192, 144),
-            AnchorPoint::MiddleRight => (374, 144),
-            AnchorPoint::BottomLeft => (10, 278),
-            AnchorPoint::BottomCenter => (192, 278),
-            AnchorPoint::BottomRight => (374, 278),
+            AnchorPoint::TopLeft => (0, 0),
+            AnchorPoint::TopCenter => (640, 0),     // 1280/2
+            AnchorPoint::TopRight => (1280, 0),     // 1280
+            AnchorPoint::MiddleLeft => (0, 360),    // 720/2
+            AnchorPoint::Center => (640, 360),      // 1280/2, 720/2
+            AnchorPoint::MiddleRight => (1280, 360),// 1280, 720/2
+            AnchorPoint::BottomLeft => (0, 720),    // 720
+            AnchorPoint::BottomCenter => (640, 720),// 1280/2, 720
+            AnchorPoint::BottomRight => (1280, 720),// 1280, 720
         }
     }
 }
@@ -147,7 +146,7 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle
     Ok(aspasia::WebVttSubtitle::from_str(&w).unwrap())
 }
 
-pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
+pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
     let paragraph = &captions.body.elements;
     let mut w = String::new();
 
@@ -157,11 +156,11 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
     // this is to make the resulting file nice and small
     let style = "Default";
     let font = "Roboto";
-    let fontsize = "16";
-    let primarycolour = "&Hffffff";
-    let secondarycolour = "&Hffffff";
-    let outlinecolour = "&H0";
-    let backcolour = "&H0";
+    let fontsize = "38";
+    let primarycolour = "&H01FEFEFE";
+    let secondarycolour = "&HFF000000";
+    let outlinecolour = "&H00000000";
+    let backcolour = "&H00000000";
     let bold = 0;
     let italic = 0;
     let underline = 0;
@@ -171,40 +170,41 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
     let spacing = 0;
     let angle = 0;
     let borderstyle = 1;
-    let outline = 1;
+    let outline = 0;
     let shadow = 0;
     let alignment = 2;
-    let marginl = 10;
-    let marginr = 10;
-    let marginv = 10;
+    let marginl = 25;
+    let marginr = 25;
+    let marginv = 15;
     let encoding = 1;
 
     let layer = 0;
     let name = "";
     let effect = "";
 
-    let playresx = 384;
-    let playresy = 288;
+    let playresx = 1280;
+    let playresy = 720;
     // not sure about a good way to get these, YTSC hardcodes them
     // so thats what were doing!!!
     // these are the default for ffmpeg vtt > ass conversion, so we use that
 
     writeln!(&mut w, "[Script Info]").unwrap();
-    writeln!(&mut w, "ScriptType: v4.00+").unwrap();
-    writeln!(&mut w, "PlayResX: {}", playresx).unwrap();
-    writeln!(&mut w, "PlayResY: {}", playresy).unwrap();
-    writeln!(&mut w, "").unwrap();
-    writeln!(&mut w, "[V4+ Styles]").unwrap();
-    writeln!(&mut w, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").unwrap();
-    writeln!(&mut w, "Style: {},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
-        style, font, fontsize, primarycolour, secondarycolour, outlinecolour, backcolour,
-        bold, italic, underline, strikeout, scalex, scaley, spacing, angle,
-        borderstyle, outline, shadow, alignment, marginl, marginr, marginv, encoding
-    ).unwrap();
-    writeln!(&mut w, "").unwrap();
-    writeln!(&mut w, "[Events]").unwrap();
-    writeln!(&mut w, "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text").unwrap();
-
+        writeln!(&mut w, "ScriptType: v4.00+").unwrap();
+        writeln!(&mut w, "WrapStyle: 0").unwrap();
+        writeln!(&mut w, "ScaledBorderAndShadow: yes").unwrap();
+        writeln!(&mut w, "PlayResX: {}", playresx).unwrap();
+        writeln!(&mut w, "PlayResY: {}", playresy).unwrap();
+        writeln!(&mut w, "").unwrap();
+        writeln!(&mut w, "[V4+ Styles]").unwrap();
+        writeln!(&mut w, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").unwrap();
+        writeln!(&mut w, "Style: {},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            style, font, fontsize, primarycolour, secondarycolour, outlinecolour, backcolour,
+            bold, italic, underline, strikeout, scalex, scaley, spacing, angle,
+            borderstyle, outline, shadow, alignment, marginl, marginr, marginv, encoding
+        ).unwrap();
+        writeln!(&mut w, "").unwrap();
+        writeln!(&mut w, "[Events]").unwrap();
+        writeln!(&mut w, "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text").unwrap();
     for element in paragraph {
         //println!("{:?}", element);
         match element {
@@ -213,21 +213,44 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
                     if let Some(head) = &captions.head {
                         if let Some(wp) = head.wp.iter().find(|wp| wp.id == wp_id) {
                             if let Some(ap) = &wp.anchor_point {
-                                let (base_x, base_y) = ap.coordinates();
-                                // i added +50 and -45 to move the positioning properly
-                                // in aishite, this might be a horrible broken hack but
-                                // we will see
-                                let y = if let Some(av) = wp.vertical_offset {
-                                    ((base_y + av + 50) as f32 * 0.96 + 2.0) as i32
-                                } else {
-                                    (base_y as f32 * 0.96 + 2.0) as i32
+                                let alignment = match ap {
+                                    AnchorPoint::TopLeft => 7,
+                                    AnchorPoint::TopCenter => 8,
+                                    AnchorPoint::TopRight => 9,
+                                    AnchorPoint::MiddleLeft => 4,
+                                    AnchorPoint::Center => 5,
+                                    AnchorPoint::MiddleRight => 6,
+                                    AnchorPoint::BottomLeft => 1,
+                                    AnchorPoint::BottomCenter => 2,
+                                    AnchorPoint::BottomRight => 3,
                                 };
+
+                                // Convert percentage coordinates to pixel coordinates
                                 let x = if let Some(ah) = wp.horizontal_offset {
-                                    ((base_x + ah - 45) as f32 * 0.96 + 2.0) as i32
+                                    let effective_percent = (ah as f32 * 0.96) + 2.0;
+                                    effective_percent * 1280.0 / 100.0
                                 } else {
-                                    (base_x as f32 * 0.96 + 2.0) as i32
+                                    640.0  // Center
                                 };
-                                format!("{{\\pos({},{})}}", x, y)
+
+                                let y = if let Some(av) = wp.vertical_offset {
+                                    let effective_percent = (av as f32 * 0.96) + 2.0;
+                                    effective_percent * 720.0 / 100.0
+                                } else {
+                                    360.0  // Center
+                                };
+
+                                let an_str = if alignment != 2 {
+                                    format!("{{\\an{}}}", alignment)
+                                } else {
+                                    String::new()
+                                };
+
+                                format!("{}{{\\pos({:.3},{:.3})}}",
+                                    an_str,
+                                    x,
+                                    y
+                                )
                             } else {
                                 String::new()
                             }
@@ -327,7 +350,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<AssSubtitle> {
     }
 
     //println!("{}", w);
-    Ok(aspasia::AssSubtitle::from_str(&w).unwrap())
+    Ok(w)
 }
 
 pub fn to_srt(
