@@ -327,7 +327,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                 "YTGlow"
                             };
 
-                            // process each span with its own font size
+                            // process each span with its own font size and text offset
                             let formatted_text = paragraph.inner.iter().map(|elem| {
                                 if let BodyElement::Span(span) = elem {
                                     if let Some(span_pen_id) = span.pen {
@@ -343,7 +343,15 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                                 }
                                             }).unwrap_or_default();
 
-                                            format!("{}{}", size_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp()))
+                                            // get text offset tag (subscript/superscript)
+                                            let offset_tag = span_pen.text_offset.as_ref().map(|offset| {
+                                                match offset {
+                                                    srv3_ttml::TextOffset::Subscript => "{\\ytsub}",
+                                                    srv3_ttml::TextOffset::Superscript | srv3_ttml::TextOffset::SuperscriptAlt => "{\\ytsup}",
+                                                }
+                                            }).unwrap_or_default();
+
+                                            format!("{}{}{}", size_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp()))
                                         } else {
                                             span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp())
                                         }

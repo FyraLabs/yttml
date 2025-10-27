@@ -174,8 +174,9 @@ pub enum TextEmphasis {
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum TextOffset {
+    Subscript = 0,
     Superscript = 1,
-    Subscript = 2,
+    SuperscriptAlt = 2,  // Alternative encoding, treat as superscript
 }
 
 
