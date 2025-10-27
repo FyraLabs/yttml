@@ -355,13 +355,15 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         if let Some(pen_id) = text_span_pen_id {
                             let pen = head.pen.iter().find(|pen| pen.id == pen_id);
 
-                            let bg_color = pen.and_then(|pen| pen.background_color.as_ref())
-                               .map(|color| hex_to_ass_color(color))
-                               .unwrap_or_else(|| String::from("&H000000"));
-
-                            let fg_color = pen.and_then(|pen| pen.foreground_color.as_ref())
-                               .map(|color| hex_to_ass_color(color))
-                               .unwrap_or_else(|| String::from("&HFFFFFF"));
+                            // Get background alpha for tertiary color (background box)
+                            // ASS alpha is inverted: 0 = opaque, 255 = transparent
+                            // So ASS_alpha = 255 - SRV3_opacity
+                            let bg_alpha = pen.and_then(|pen| pen.background_opacity)
+                               .map(|opacity| {
+                                   let alpha = 255 - opacity;
+                                   format!("&H{:02X}&", alpha)
+                               })
+                               .unwrap_or_else(|| String::from("&HFF&")); // Default fully transparent
 
                             let font_family = pen.and_then(|pen| pen.font_style.as_ref())
                                 .map(|fs| match fs {
@@ -500,9 +502,23 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                 }
                             }).collect::<String>();
 
+                            // Merge first override tag into the main override block
+                            // If formatted_text starts with {\tag}, extract \tag and move it to the override block
+                            let (merged_tag, remaining_text) = if formatted_text.starts_with('{') {
+                                if let Some(end_pos) = formatted_text.find('}') {
+                                    let tag = &formatted_text[1..end_pos]; // Extract tag without braces
+                                    let rest = &formatted_text[end_pos+1..]; // Everything after the closing brace
+                                    (tag.to_string(), rest.to_string())
+                                } else {
+                                    (String::new(), formatted_text)
+                                }
+                            } else {
+                                (String::new(), formatted_text)
+                            };
+
                             writeln!(
                                 &mut w,
-                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3c{}\\1c{}{}}}{}",
+                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3a{}{}{}}}{}",
                                 layer,
                                 aspasia::timing::Moment::as_substation_timestamp(
                                     &aspasia::timing::Moment::from(paragraph.timestamp as i64)
@@ -517,10 +533,10 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                 marginv,
                                 effect,
                                 position_str,
-                                bg_color,
-                                fg_color,
+                                bg_alpha,
                                 font_family,
-                                formatted_text
+                                merged_tag,
+                                remaining_text
                             ).unwrap();
                         }
                     }
