@@ -385,7 +385,7 @@ pub struct Window {
 // the actual data we want to really parse
 //
 // It's a bunch of <p> tags with some attributes and inner text, kinda like HTML
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Paragraph {
     // The actual text inside the <p> tag
     // <p>text</p>
@@ -504,7 +504,7 @@ impl Paragraph {
 
 // todo: make the thing like HTML
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Span {
     #[serde(rename = "$value")]
     pub inner: Option<Vec<BodyElement>>,
@@ -529,7 +529,7 @@ impl ElementExt for Span {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Br; // todo: Somehow convert this into a newline
 
 impl ElementExt for Br {
@@ -544,7 +544,7 @@ pub struct Div {
     pub elements: Vec<BodyElement>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BodyElement {
     #[serde(rename = "$text")]
     Text(String),

@@ -55,6 +55,47 @@ trait ElementExt {
     }
 }
 
+// Helper function to split paragraph elements into groups separated by newlines
+fn split_on_newlines(elements: &[BodyElement]) -> Vec<Vec<BodyElement>> {
+    let mut groups = Vec::new();
+    let mut current_group = Vec::new();
+    
+    for elem in elements {
+        match elem {
+            BodyElement::Text(t) if t.contains('\n') => {
+                // Split text on newlines
+                let parts: Vec<&str> = t.split('\n').collect();
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 && !current_group.is_empty() {
+                        // Start new group after newline
+                        groups.push(current_group);
+                        current_group = Vec::new();
+                    }
+                    if !part.is_empty() {
+                        current_group.push(BodyElement::Text(part.to_string()));
+                    }
+                }
+            }
+            BodyElement::Br(_) => {
+                // Explicit line break - end current group
+                if !current_group.is_empty() {
+                    groups.push(current_group);
+                    current_group = Vec::new();
+                }
+            }
+            _ => {
+                current_group.push(elem.clone());
+            }
+        }
+    }
+    
+    if !current_group.is_empty() {
+        groups.push(current_group);
+    }
+    
+    groups
+}
+
 impl ElementExt for String {
     fn text(&self) -> String {
         self.clone()
