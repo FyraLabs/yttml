@@ -1,4 +1,5 @@
 use crate::ass_test_helpers::{compare_ass_files, parse_ass};
+use aspasia::Subtitle;
 use srv3_ttml::TimedText;
 #[allow(unused_imports)]
 use std::str::FromStr;
@@ -42,7 +43,8 @@ macro_rules! define_ass_test {
             );
 
             // Parse expected and actual ASS files for semantic comparison
-            let expected_content = include_str!(concat!("../tests/ass/", $test_file, ".reverse.ass"));
+            let expected_content =
+                include_str!(concat!("../tests/ass/", $test_file, ".reverse.ass"));
 
             let expected_parsed = parse_ass(expected_content).unwrap_or_else(|e| {
                 panic!("{}: Failed to parse expected ASS file: {}", $test_file, e)
@@ -60,13 +62,13 @@ macro_rules! define_ass_test {
                 }
                 eprintln!(
                     "\nExpected {} dialogue lines, got {}",
-                    expected_parsed.events.len(),
-                    actual_parsed.events.len()
+                    expected_parsed.events().len(),
+                    actual_parsed.events().len()
                 );
                 eprintln!(
                     "Expected {} styles, got {}",
-                    expected_parsed.styles.len(),
-                    actual_parsed.styles.len()
+                    expected_parsed.styles().len(),
+                    actual_parsed.styles().len()
                 );
 
                 // Fail the test with detailed error message

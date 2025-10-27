@@ -139,7 +139,7 @@ fn run_single_test(test_name: &str, output_dir: &Path) -> Result<Vec<String>, St
     }
 }
 
-#[test]
-fn generate_test_comparison_files() {
-    run_all_tests_with_output();
-}
+// #[test]
+// fn generate_test_comparison_files() {
+//     run_all_tests_with_output();
+// }
