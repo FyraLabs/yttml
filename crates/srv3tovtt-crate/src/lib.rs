@@ -132,10 +132,22 @@ fn paragraph_has_visible_pen(elements: &[BodyElement], head: &Head) -> bool {
 
 fn prepare_ass_text(input: &str) -> String {
     let mut cleaned = String::with_capacity(input.len());
-    for ch in input.chars() {
-        if ch != '\u{200B}' {
-            cleaned.push(ch);
+    let mut chars = input.chars().peekable();
+    let mut prev_was_zwsp = false;
+    while let Some(ch) = chars.next() {
+        if ch == '\u{200B}' {
+            prev_was_zwsp = true;
+            continue;
         }
+
+        if ch == ' ' && prev_was_zwsp && matches!(chars.peek(), Some('\u{200B}')) {
+            // Skip the padding space sandwiched between zero-width spaces.
+            prev_was_zwsp = false;
+            continue;
+        }
+
+        cleaned.push(ch);
+        prev_was_zwsp = false;
     }
 
     let mut output = String::with_capacity(cleaned.len());
@@ -599,6 +611,22 @@ fn sanitize_ass_text(mut text: String) -> String {
     text = text.replace(MARKER_LIT_LOWER_H, "\\{}h");
     text = text.replace(MARKER_LIT_LBRACE, "\\{");
     text = text.replace(MARKER_LIT_RBRACE, "\\}");
+
+    const CONTROL_SEQS: [&str; 6] = ["\\N", "\\n", "\\{}N", "\\{}n", "\\{}H", "\\{}h"];
+    if text.contains(' ') {
+        for seq in CONTROL_SEQS {
+            let prefix_pattern = format!(" {}", seq);
+            while let Some(pos) = text.find(&prefix_pattern) {
+                text.replace_range(pos..pos + 1, "");
+            }
+
+            let suffix_pattern = format!("{} ", seq);
+            while let Some(pos) = text.find(&suffix_pattern) {
+                let remove_start = pos + seq.len();
+                text.replace_range(remove_start..remove_start + 1, "");
+            }
+        }
+    }
 
     fn strip_redundant_tags(text: &mut String, newline: &str) {
         let pattern = format!("}}{}", newline);
