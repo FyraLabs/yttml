@@ -61,6 +61,13 @@ cargo test test_hex_to_ass_color  # Test color conversion
 cargo run -- parse "crates/srv3-ttml/test/aishite.srv3" --format ass
 ```
 
+
+## Running YTSubConverter for comparison
+
+- Download binaries from `https://github.com/arcusmaximus/YTSubConverter/releases/download/1.6.3/YTSubConverter-Linux.tar.xz`
+- Do `mono YTSubConverter.exe <file.ytt>`
+- A corresponding `file.ass` will be outputted
+
 ## Code Conventions
 
 ### Module Organization
