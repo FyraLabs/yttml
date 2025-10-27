@@ -50,6 +50,61 @@ fn hex_to_ass_color(hex: &HexColor) -> String {
 
 trait ElementExt {
     fn text(&self) -> String;
+    fn text_no_zwsp(&self) -> String {
+        self.text().replace('\u{200B}', "")
+    }
+    // Remove padding pattern: \u200b SPACE \u200b
+    fn text_clean(&self) -> String {
+        let text = self.text();
+        // Remove the specific padding pattern used by YTSubConverter
+        text.replace("\u{200B} \u{200B}", "").replace('\u{200B}', "")
+    }
+    // Clean text and escape newlines for ASS format
+    fn text_clean_ass(&self) -> String {
+        // Replace literal newlines with ASS escape sequence \N
+        self.text_clean().replace('\n', "\\N")
+    }
+}
+
+// Helper function to split paragraph elements into groups separated by newlines
+fn split_on_newlines(elements: &[BodyElement]) -> Vec<Vec<BodyElement>> {
+    let mut groups = Vec::new();
+    let mut current_group = Vec::new();
+    
+    for elem in elements {
+        match elem {
+            BodyElement::Text(t) if t.contains('\n') => {
+                // Split text on newlines
+                let parts: Vec<&str> = t.split('\n').collect();
+                for (i, part) in parts.iter().enumerate() {
+                    if i > 0 && !current_group.is_empty() {
+                        // Start new group after newline
+                        groups.push(current_group);
+                        current_group = Vec::new();
+                    }
+                    if !part.is_empty() {
+                        current_group.push(BodyElement::Text(part.to_string()));
+                    }
+                }
+            }
+            BodyElement::Br(_) => {
+                // Explicit line break - end current group
+                if !current_group.is_empty() {
+                    groups.push(current_group);
+                    current_group = Vec::new();
+                }
+            }
+            _ => {
+                current_group.push(elem.clone());
+            }
+        }
+    }
+    
+    if !current_group.is_empty() {
+        groups.push(current_group);
+    }
+    
+    groups
 }
 
 impl ElementExt for String {
@@ -77,8 +132,6 @@ impl ElementExt for Paragraph {
             .map(|elem| elem.text())
             .collect::<Vec<_>>()
             .join("")
-            .trim()
-            .to_string()
     }
 }
 
@@ -88,8 +141,6 @@ impl ElementExt for Vec<BodyElement> {
             .map(|elem| elem.text())
             .collect::<Vec<_>>()
             .join("")
-            .trim()
-            .to_string()
     }
 }
 
@@ -225,10 +276,22 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                     360.0  // Center
                                 };
 
-                                format!("\\an{}\\pos({:.3},{:.3})",
+                                // Helper function to format position coordinates
+                                // Shows whole numbers without decimals, otherwise shows up to 3 decimals
+                                let format_coord = |val: f32| -> String {
+                                    if val == val.floor() {
+                                        format!("{}", val as i32)
+                                    } else {
+                                        // Round to 3 decimal places and trim trailing zeros
+                                        let rounded = (val * 1000.0).round() / 1000.0;
+                                        format!("{:.3}", rounded).trim_end_matches('0').trim_end_matches('.').to_string()
+                                    }
+                                };
+
+                                format!("\\an{}\\pos({},{})",
                                     if alignment != 2 { alignment.to_string() } else { String::new() },
-                                    x,
-                                    y
+                                    format_coord(x),
+                                    format_coord(y)
                                 )
 
                             } else {
@@ -262,7 +325,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         effect,
                         "", // if we dont have pens (the color) dont write the color
                             // there is definitely a cleaner way of doing this but this works
-                        paragraph.inner.text()
+                        paragraph.inner.text_clean_ass()
                     ).unwrap();
                 } else {
                     if let Some(head) = &captions.head {
@@ -292,13 +355,15 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         if let Some(pen_id) = text_span_pen_id {
                             let pen = head.pen.iter().find(|pen| pen.id == pen_id);
 
-                            let bg_color = pen.and_then(|pen| pen.background_color.as_ref())
-                               .map(|color| hex_to_ass_color(color))
-                               .unwrap_or_else(|| String::from("&H000000"));
-
-                            let fg_color = pen.and_then(|pen| pen.foreground_color.as_ref())
-                               .map(|color| hex_to_ass_color(color))
-                               .unwrap_or_else(|| String::from("&HFFFFFF"));
+                            // Get background alpha for tertiary color (background box)
+                            // ASS alpha is inverted: 0 = opaque, 255 = transparent
+                            // So ASS_alpha = 255 - SRV3_opacity
+                            let bg_alpha = pen.and_then(|pen| pen.background_opacity)
+                               .map(|opacity| {
+                                   let alpha = 255 - opacity;
+                                   format!("&H{:02X}&", alpha)
+                               })
+                               .unwrap_or_else(|| String::from("&HFF&")); // Default fully transparent
 
                             let font_family = pen.and_then(|pen| pen.font_style.as_ref())
                                 .map(|fs| match fs {
@@ -314,47 +379,146 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
 
                             let style = if let Some(pen) = pen {
                                 match pen.edge_type {
-                                    Some(EdgeType::HardShadow) => "YTHardShadow",
-                                    Some(EdgeType::Bevel) => "YTBevel",
-                                    Some(EdgeType::Glow) => "YTGlow",
-                                    Some(EdgeType::SoftShadow) => "YTSoftShadow",
-                                    Some(EdgeType::None) | None => "YTGlow"
+                                    Some(EdgeType::HardShadow) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTHardShadowBox"
+                                        } else {
+                                            "YTHardShadow"
+                                        }
+                                    }
+                                    Some(EdgeType::Bevel) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTBevelBox"
+                                        } else {
+                                            "YTBevel"
+                                        }
+                                    }
+                                    Some(EdgeType::Glow) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTGlowBox"
+                                        } else {
+                                            "YTGlow"
+                                        }
+                                    }
+                                    Some(EdgeType::SoftShadow) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTSoftShadowBox"
+                                        } else {
+                                            "YTSoftShadow"
+                                        }
+                                    }
+                                    Some(EdgeType::None) | None => {
+                                        // No edge type - check if we have a box (background opacity)
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTPlainBox"
+                                        } else {
+                                            "YTPlain"
+                                        }
+                                    }
                                 }
                             } else {
-                                "YTGlow"
+                                "YTPlain"
                             };
 
-                            // process each span with its own font size
+                            // process each span with its own font size and text offset
+                            // Track previous formatting state to emit transition tags
+                            let mut prev_offset: Option<&srv3_ttml::TextOffset> = None;
+                            let mut prev_bold: Option<bool> = None;
+                            let mut prev_italic: Option<bool> = None;
+                            let mut prev_underline: Option<bool> = None;
+                            
                             let formatted_text = paragraph.inner.iter().map(|elem| {
                                 if let BodyElement::Span(span) = elem {
                                     if let Some(span_pen_id) = span.pen {
                                         if let Some(span_pen) = head.pen.iter().find(|p| p.id == span_pen_id) {
-                                            // get font size for the correct span
-                                            let size_tag = span_pen.font_size.map(|size| {
-                                                let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
-                                                let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
-                                                format!("{{\\fs{}}}", relative_size)
-
-                                                // not sure if it was a good idea to hardcode 38 here,
-                                                // but seeing that all of the styles have
-                                                // 38 anyway, it should be ok
+                                            // get font size for the correct span, only if different from default
+                                            let size_tag = span_pen.font_size.and_then(|size| {
+                                                if size == 100 {
+                                                    None  // Don't add tag for default size
+                                                } else {
+                                                    let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
+                                                    let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
+                                                    Some(format!("{{\\fs{}}}", relative_size))
+                                                }
                                             }).unwrap_or_default();
 
-                                            format!("{}{}", size_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text()))
+                                            // get bold tag - only emit when state changes
+                                            let current_bold = span_pen.bold.unwrap_or(false);
+                                            let bold_tag = match prev_bold {
+                                                Some(prev) if prev != current_bold => {
+                                                    if current_bold { "{\\b1}" } else { "{\\b0}" }
+                                                }
+                                                None if current_bold => "{\\b1}",
+                                                _ => "",
+                                            };
+                                            prev_bold = Some(current_bold);
+
+                                            // get italic tag - only emit when state changes
+                                            let current_italic = span_pen.italic.unwrap_or(false);
+                                            let italic_tag = match prev_italic {
+                                                Some(prev) if prev != current_italic => {
+                                                    if current_italic { "{\\i1}" } else { "{\\i0}" }
+                                                }
+                                                None if current_italic => "{\\i1}",
+                                                _ => "",
+                                            };
+                                            prev_italic = Some(current_italic);
+
+                                            // get underline tag - only emit when state changes
+                                            let current_underline = span_pen.underline.unwrap_or(false);
+                                            let underline_tag = match prev_underline {
+                                                Some(prev) if prev != current_underline => {
+                                                    if current_underline { "{\\u1}" } else { "{\\u0}" }
+                                                }
+                                                None if current_underline => "{\\u1}",
+                                                _ => "",
+                                            };
+                                            prev_underline = Some(current_underline);
+
+                                            // get text offset tag (subscript/superscript)
+                                            let offset_tag = match (&prev_offset, &span_pen.text_offset) {
+                                                // Transitioning from subscript/superscript to regular (no offset)
+                                                (Some(_), None) => "{\\ytsur}",
+                                                // Transitioning to subscript
+                                                (_, Some(srv3_ttml::TextOffset::Subscript)) => "{\\ytsub}",
+                                                // Transitioning to superscript
+                                                (_, Some(srv3_ttml::TextOffset::Superscript | srv3_ttml::TextOffset::SuperscriptAlt)) => "{\\ytsup}",
+                                                // No change or no offset
+                                                _ => "",
+                                            };
+                                            
+                                            // Update previous offset state
+                                            prev_offset = span_pen.text_offset.as_ref();
+
+                                            format!("{}{}{}{}{}{}", size_tag, bold_tag, italic_tag, underline_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass()))
                                         } else {
-                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text())
+                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass())
                                         }
                                     } else {
-                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text())
+                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass())
                                     }
                                 } else {
-                                    elem.text()
+                                    elem.text_clean_ass()
                                 }
                             }).collect::<String>();
 
+                            // Merge first override tag into the main override block
+                            // If formatted_text starts with {\tag}, extract \tag and move it to the override block
+                            let (merged_tag, remaining_text) = if formatted_text.starts_with('{') {
+                                if let Some(end_pos) = formatted_text.find('}') {
+                                    let tag = &formatted_text[1..end_pos]; // Extract tag without braces
+                                    let rest = &formatted_text[end_pos+1..]; // Everything after the closing brace
+                                    (tag.to_string(), rest.to_string())
+                                } else {
+                                    (String::new(), formatted_text)
+                                }
+                            } else {
+                                (String::new(), formatted_text)
+                            };
+
                             writeln!(
                                 &mut w,
-                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3c{}\\1c{}{}}}{}",
+                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3a{}{}{}}}{}",
                                 layer,
                                 aspasia::timing::Moment::as_substation_timestamp(
                                     &aspasia::timing::Moment::from(paragraph.timestamp as i64)
@@ -369,10 +533,10 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                 marginv,
                                 effect,
                                 position_str,
-                                bg_color,
-                                fg_color,
+                                bg_alpha,
                                 font_family,
-                                formatted_text
+                                merged_tag,
+                                remaining_text
                             ).unwrap();
                         }
                     }
