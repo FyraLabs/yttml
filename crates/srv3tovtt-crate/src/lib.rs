@@ -417,22 +417,30 @@ impl FormattingState {
         }
 
         if let Some(opacity) = pen.foreground_opacity {
-            if opacity == 0 {
-                self.primary_alpha = defaults.primary_alpha;
-            } else {
-                let clamped = (opacity.min(255)) as u8;
-                self.primary_alpha = 255u8.saturating_sub(clamped);
-            }
+            let clamped = clamp_u32_to_u8(opacity);
+            self.primary_alpha = 255u8.saturating_sub(clamped);
         }
 
+        let effective_edge_type = pen.edge_type.or(self.edge_type);
+
         if let Some(opacity) = pen.background_opacity {
-            let clamped = clamp_u32_to_u8(opacity as u32);
+            let clamped = clamp_u32_to_u8(u32::from(opacity));
             if clamped == 0 {
-                self.outline_alpha = defaults.outline_alpha;
-                self.outline_color = defaults.outline_color.clone();
                 self.has_background = false;
+                self.outline_alpha = defaults.outline_alpha;
+                self.back_alpha = defaults.back_alpha;
             } else {
-                self.outline_alpha = 255u8.saturating_sub(clamped);
+                let alpha = 255u8.saturating_sub(clamped);
+                self.outline_alpha = alpha;
+                if matches!(
+                    effective_edge_type,
+                    Some(EdgeType::Glow)
+                        | Some(EdgeType::SoftShadow)
+                        | Some(EdgeType::HardShadow)
+                        | Some(EdgeType::Bevel)
+                ) {
+                    self.back_alpha = alpha;
+                }
                 self.has_background = true;
             }
         }
@@ -445,6 +453,7 @@ impl FormattingState {
             edge_alpha_override = Some(255u8.saturating_sub(fallback_alpha));
         }
 
+        let mut edge_channel_overridden = false;
         if let Some(color) = edge_color_override {
             let effective_edge_type = pen.edge_type.or(self.edge_type);
             match effective_edge_type {
@@ -466,6 +475,7 @@ impl FormattingState {
                     if let Some(alpha) = edge_alpha_override {
                         self.back_alpha = alpha;
                     }
+                    edge_channel_overridden = true;
                 }
                 _ => {
                     self.outline_color = color;
@@ -477,7 +487,18 @@ impl FormattingState {
         }
 
         if let Some(color) = pen.background_color.as_ref() {
-            self.outline_color = hex_to_ass_color(color);
+            let ass_color = hex_to_ass_color(color);
+            self.outline_color = ass_color.clone();
+            if matches!(
+                effective_edge_type,
+                Some(EdgeType::Glow)
+                    | Some(EdgeType::SoftShadow)
+                    | Some(EdgeType::HardShadow)
+                    | Some(EdgeType::Bevel)
+            ) && !edge_channel_overridden
+            {
+                self.back_color = ass_color.clone();
+            }
             self.has_background = true;
         }
 
@@ -577,8 +598,8 @@ fn default_edge_type_for_style(style_name: &str) -> Option<EdgeType> {
 }
 
 fn format_ass_float(value: f64) -> String {
-    let rounded = (value * 1000.0).round() / 1000.0;
-    let mut s = format!("{:.3}", rounded);
+    let rounded = (value * 10000.0).round() / 10000.0;
+    let mut s = format!("{:.4}", rounded);
     while s.contains('.') && s.ends_with('0') {
         s.pop();
     }
@@ -589,7 +610,7 @@ fn format_ass_float(value: f64) -> String {
 }
 
 fn floats_equal(a: f64, b: f64) -> bool {
-    (a - b).abs() < 0.0005
+    (a - b).abs() < 0.00005
 }
 
 fn trim_ass_edge_whitespace(text: String) -> String {
@@ -601,6 +622,7 @@ fn sanitize_ass_text(mut text: String) -> String {
         return text;
     }
 
+    // todo: consider better escape sequence
     text = text.replace("\r\n", "\n");
     text = text.replace('\r', "\n");
     text = text.replace('\u{00A0}', "\\h");
@@ -849,6 +871,7 @@ fn render_body_elements(
     for element in elements {
         match element {
             BodyElement::Span(span) => {
+                let original_state = current_state.clone();
                 let mut target_state = current_state.clone();
                 if let Some(pen) = span.pen.and_then(|id| find_pen(head, id)) {
                     target_state.apply_pen(pen, defaults);
@@ -865,13 +888,20 @@ fn render_body_elements(
                     continue;
                 }
 
+                let plain_text = ass_placeholders_to_plain_text(&inner_output);
+                let has_visible_text = plain_text.chars().any(|ch| !ch.is_whitespace());
+
                 let tags = transition_tags(current_state, &target_state);
                 if !tags.is_empty() {
                     output.push_str(&format!("{{{}}}", tags.join("")));
                 }
 
                 output.push_str(&inner_output);
-                *current_state = inner_state;
+                if has_visible_text {
+                    *current_state = inner_state;
+                } else {
+                    *current_state = original_state;
+                }
             }
             BodyElement::Text(text) => {
                 output.push_str(&text.text_clean_ass());
@@ -906,8 +936,8 @@ fn format_coord(value: f32) -> String {
     if (value - value.floor()).abs() < f32::EPSILON {
         format!("{}", value as i32)
     } else {
-        let rounded = (value * 1000.0).round() / 1000.0;
-        let mut s = format!("{:.3}", rounded);
+        let rounded = (value * 10000.0).round() / 10000.0;
+        let mut s = format!("{:.4}", rounded);
         while s.contains('.') && s.ends_with('0') {
             s.pop();
         }
