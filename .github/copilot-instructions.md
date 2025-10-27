@@ -12,7 +12,7 @@ YTTML is a Rust toolkit for working with YouTube's proprietary SRV3 (Server 3) s
 - `src/main.rs`: CLI tool for parsing and converting SRV3 files
 - `reference/YTSubConverter`: Original reference code as a Git submodule
 - `tests/ass`: SRV3-ASS Conversion tests
-- Root-level SRV3 samples for testing (Japanese titles, multiple languages)
+- `tests/ass/*.reverse.ass`: Output from YTSubConverter, used as reference for conversion
 
 ### Core Domain Model
 

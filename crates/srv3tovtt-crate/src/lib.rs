@@ -1,19 +1,12 @@
 pub use aspasia::timing::Moment;
-use aspasia::{SubRipSubtitle, WebVttSubtitle, AssSubtitle};
-use serde::{Deserialize, Serialize};
-use srv3_ttml::{BodyElement, AnchorPoint, FontStyle, EdgeType};
+use aspasia::{SubRipSubtitle, WebVttSubtitle};
+use hex_color::*;
+use srv3_ttml::{
+    AnchorPoint, BodyElement, EdgeType, FontStyle, Head, Paragraph as TimedTextParagraph, Pen,
+    TextOffset,
+};
 use std::fmt::Write;
 use std::str::FromStr;
-use hex_color::*;
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Paragraph {
-    inner: Vec<BodyElement>,
-    timestamp: u32,
-    duration: u32,
-    window_position: Option<u32>,
-    window_style: Option<u32>,
-}
 
 fn hex_to_ass_color(hex: &HexColor) -> String {
     let hex_str = format!("{:?}", hex);
@@ -39,99 +32,111 @@ fn hex_to_ass_color(hex: &HexColor) -> String {
             .and_then(|s| s.trim().parse::<u8>().ok())
             .unwrap_or(0);
 
-        // for some reason ASS uses BGR, i dont know who came up with this
-        // have them fired immediately
-        // also theres a H there
+        // ASS uses BGR ordering
         format!("&H{:02X}{:02X}{:02X}", b, g, r)
     } else {
         String::from("&H000000")
     }
 }
 
-trait ElementExt {
-    fn text(&self) -> String;
-    fn text_no_zwsp(&self) -> String {
-        self.text().replace('\u{200B}', "")
-    }
-    // Remove padding pattern: \u200b SPACE \u200b
-    fn text_clean(&self) -> String {
-        let text = self.text();
-        // Remove the specific padding pattern used by YTSubConverter
-        text.replace("\u{200B} \u{200B}", "").replace('\u{200B}', "")
-    }
-    // Clean text and escape newlines for ASS format
-    fn text_clean_ass(&self) -> String {
-        // Replace literal newlines with ASS escape sequence \N
-        self.text_clean().replace('\n', "\\N")
-    }
+#[derive(Clone, Debug)]
+struct StyleDefaults {
+    font_name: String,
+    font_size: f64,
+    primary_color: String,
+    primary_alpha: u8,
+    outline_color: String,
+    outline_alpha: u8,
+    back_color: String,
+    back_alpha: u8,
+    bold: bool,
+    italic: bool,
+    underline: bool,
 }
 
-// Helper function to split paragraph elements into groups separated by newlines
-fn split_on_newlines(elements: &[BodyElement]) -> Vec<Vec<BodyElement>> {
-    let mut groups = Vec::new();
-    let mut current_group = Vec::new();
-    
-    for elem in elements {
-        match elem {
-            BodyElement::Text(t) if t.contains('\n') => {
-                // Split text on newlines
-                let parts: Vec<&str> = t.split('\n').collect();
-                for (i, part) in parts.iter().enumerate() {
-                    if i > 0 && !current_group.is_empty() {
-                        // Start new group after newline
-                        groups.push(current_group);
-                        current_group = Vec::new();
-                    }
-                    if !part.is_empty() {
-                        current_group.push(BodyElement::Text(part.to_string()));
-                    }
-                }
-            }
-            BodyElement::Br(_) => {
-                // Explicit line break - end current group
-                if !current_group.is_empty() {
-                    groups.push(current_group);
-                    current_group = Vec::new();
-                }
-            }
-            _ => {
-                current_group.push(elem.clone());
-            }
+fn style_defaults(style_name: &str) -> StyleDefaults {
+    let mut defaults = StyleDefaults {
+        font_name: "Roboto".to_string(),
+        font_size: 38.0,
+        primary_color: "&HFEFEFE".to_string(),
+        primary_alpha: 0x01,
+        outline_color: "&H000000".to_string(),
+        outline_alpha: 0x01,
+        back_color: "&H000000".to_string(),
+        back_alpha: 0x01,
+        bold: false,
+        italic: false,
+        underline: false,
+    };
+
+    match style_name {
+        "YTPlain" => {
+            defaults.outline_alpha = 0x00;
+            defaults.back_alpha = 0x00;
         }
+        "YTPlainBox" => {
+            defaults.outline_alpha = 0x01;
+            defaults.back_alpha = 0x00;
+        }
+        "YTGlow" | "YTGlowBox" | "YTSoftShadow" | "YTSoftShadowBox" | "YTHardShadow"
+        | "YTHardShadowBox" | "YTBevel" => {
+            defaults.outline_alpha = 0x01;
+            defaults.back_alpha = 0x01;
+        }
+        "YTBevelBox" => {
+            defaults.outline_alpha = 0x01;
+            defaults.back_alpha = 0x00;
+        }
+        _ => {}
     }
-    
-    if !current_group.is_empty() {
-        groups.push(current_group);
-    }
-    
-    groups
+
+    defaults
+}
+
+trait ElementExt {
+    fn text(&self) -> String;
+    fn text_clean_ass(&self) -> String;
 }
 
 impl ElementExt for String {
     fn text(&self) -> String {
         self.clone()
     }
-}
-impl ElementExt for BodyElement {
-    fn text(&self) -> String {
-        match self {
-            Self::Text(t) => t.text(),
-            Self::Paragraph(p) => p.text(),
-            Self::Span(s) => s.inner.as_ref().map_or(String::new(), |inner| inner.text()),
-            Self::Br(_) => "\n".to_string(),
-            Self::Div(elements) => elements.text(),
-            Self::Window(_) => String::new(),
-        }
+
+    fn text_clean_ass(&self) -> String {
+        self.replace('\u{200B}', "").replace('\n', "\\N")
     }
 }
 
-impl ElementExt for Paragraph {
+impl ElementExt for BodyElement {
     fn text(&self) -> String {
-        self.inner
-            .iter()
-            .map(|elem| elem.text())
-            .collect::<Vec<_>>()
-            .join("")
+        match self {
+            BodyElement::Text(text) => text.text(),
+            BodyElement::Paragraph(paragraph) => paragraph.inner.text(),
+            BodyElement::Span(span) => span
+                .inner
+                .as_ref()
+                .map(|inner| inner.text())
+                .unwrap_or_default(),
+            BodyElement::Br(_) => "\n".to_string(),
+            BodyElement::Div(elements) => elements.text(),
+            BodyElement::Window(_) => String::new(),
+        }
+    }
+
+    fn text_clean_ass(&self) -> String {
+        match self {
+            BodyElement::Text(text) => text.text_clean_ass(),
+            BodyElement::Paragraph(paragraph) => paragraph.inner.text_clean_ass(),
+            BodyElement::Span(span) => span
+                .inner
+                .as_ref()
+                .map(|inner| inner.text_clean_ass())
+                .unwrap_or_default(),
+            BodyElement::Br(_) => "\\N".to_string(),
+            BodyElement::Div(elements) => elements.text_clean_ass(),
+            BodyElement::Window(_) => String::new(),
+        }
     }
 }
 
@@ -141,7 +146,433 @@ impl ElementExt for Vec<BodyElement> {
             .map(|elem| elem.text())
             .collect::<Vec<_>>()
             .join("")
+            .trim()
+            .to_string()
     }
+
+    fn text_clean_ass(&self) -> String {
+        self.iter()
+            .map(|elem| elem.text_clean_ass())
+            .collect::<Vec<_>>()
+            .join("")
+    }
+}
+
+impl ElementExt for TimedTextParagraph {
+    fn text(&self) -> String {
+        self.inner.text()
+    }
+
+    fn text_clean_ass(&self) -> String {
+        self.inner.text_clean_ass()
+    }
+}
+
+#[derive(Debug)]
+struct FormattingState {
+    font_name: String,
+    font_size: f64,
+    primary_color: String,
+    primary_alpha: u8,
+    outline_color: String,
+    outline_alpha: u8,
+    back_color: String,
+    back_alpha: u8,
+    bold: bool,
+    italic: bool,
+    underline: bool,
+    text_offset: Option<u8>,
+}
+
+impl Clone for FormattingState {
+    fn clone(&self) -> Self {
+        Self {
+            font_name: self.font_name.clone(),
+            font_size: self.font_size,
+            primary_color: self.primary_color.clone(),
+            primary_alpha: self.primary_alpha,
+            outline_color: self.outline_color.clone(),
+            outline_alpha: self.outline_alpha,
+            back_color: self.back_color.clone(),
+            back_alpha: self.back_alpha,
+            bold: self.bold,
+            italic: self.italic,
+            underline: self.underline,
+            text_offset: self.text_offset,
+        }
+    }
+}
+
+impl FormattingState {
+    fn from_defaults(defaults: &StyleDefaults) -> Self {
+        Self {
+            font_name: defaults.font_name.clone(),
+            font_size: defaults.font_size,
+            primary_color: defaults.primary_color.clone(),
+            primary_alpha: defaults.primary_alpha,
+            outline_color: defaults.outline_color.clone(),
+            outline_alpha: defaults.outline_alpha,
+            back_color: defaults.back_color.clone(),
+            back_alpha: defaults.back_alpha,
+            bold: defaults.bold,
+            italic: defaults.italic,
+            underline: defaults.underline,
+            text_offset: None,
+        }
+    }
+
+    fn apply_pen(&mut self, pen: &Pen, defaults: &StyleDefaults) {
+        if let Some(font_style) = pen.font_style.as_ref() {
+            self.font_name = font_name_for_style(font_style).to_string();
+        }
+
+        if let Some(size) = pen.font_size {
+            let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
+            self.font_size = defaults.font_size * real_percentage / 100.0;
+        }
+
+        if let Some(value) = pen.bold {
+            self.bold = value;
+        }
+
+        if let Some(value) = pen.italic {
+            self.italic = value;
+        }
+
+        if let Some(value) = pen.underline {
+            self.underline = value;
+        }
+
+        if let Some(color) = pen.foreground_color.as_ref() {
+            self.primary_color = hex_to_ass_color(color);
+        }
+
+        if let Some(opacity) = pen.foreground_opacity {
+            let clamped = (opacity.min(255)) as u8;
+            self.primary_alpha = 255u8.saturating_sub(clamped);
+        }
+
+        if let Some(color) = pen.edge_color.as_ref() {
+            self.outline_color = hex_to_ass_color(color);
+        }
+
+        if let Some(opacity) = pen.background_opacity {
+            self.back_alpha = 255u8.saturating_sub(opacity);
+        }
+
+        if let Some(color) = pen.background_color.as_ref() {
+            self.back_color = hex_to_ass_color(color);
+        }
+
+        if let Some(offset) = pen.text_offset.as_ref() {
+            self.text_offset = Some(match offset {
+                TextOffset::Subscript => 0,
+                TextOffset::Superscript | TextOffset::SuperscriptAlt => 1,
+            });
+        } else {
+            self.text_offset = None;
+        }
+    }
+}
+
+fn font_name_for_style(style: &FontStyle) -> &'static str {
+    match style {
+        FontStyle::Default | FontStyle::ProportionalSans => "Roboto",
+        FontStyle::MonoSerif => "Courier New",
+        FontStyle::ProportionalSerif => "Times New Roman",
+        FontStyle::MonoSans => "Lucida Console",
+        FontStyle::Casual => "Comic Sans MS",
+        FontStyle::Cursive => "Monotype Corsiva",
+        FontStyle::SmallCaps => "Arial",
+    }
+}
+
+fn choose_style_for_pen(pen: Option<&Pen>) -> &'static str {
+    let default_style = "YTGlow";
+
+    match pen {
+        Some(pen) => {
+            let has_background = pen.background_opacity.unwrap_or(0) > 0;
+            match pen.edge_type {
+                Some(EdgeType::HardShadow) => {
+                    if has_background {
+                        "YTHardShadowBox"
+                    } else {
+                        "YTHardShadow"
+                    }
+                }
+                Some(EdgeType::Bevel) => {
+                    if has_background {
+                        "YTBevelBox"
+                    } else {
+                        "YTBevel"
+                    }
+                }
+                Some(EdgeType::Glow) => {
+                    if has_background {
+                        "YTGlowBox"
+                    } else {
+                        "YTGlow"
+                    }
+                }
+                Some(EdgeType::SoftShadow) => {
+                    if has_background {
+                        "YTSoftShadowBox"
+                    } else {
+                        "YTSoftShadow"
+                    }
+                }
+                Some(EdgeType::None) | None => {
+                    if has_background {
+                        "YTPlainBox"
+                    } else {
+                        "YTPlain"
+                    }
+                }
+            }
+        }
+        None => default_style,
+    }
+}
+
+fn format_ass_float(value: f64) -> String {
+    let rounded = (value * 1000.0).round() / 1000.0;
+    let mut s = format!("{:.3}", rounded);
+    while s.contains('.') && s.ends_with('0') {
+        s.pop();
+    }
+    if s.ends_with('.') {
+        s.pop();
+    }
+    s
+}
+
+fn floats_equal(a: f64, b: f64) -> bool {
+    (a - b).abs() < 0.0005
+}
+
+fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> {
+    let mut tags = Vec::new();
+
+    if from.font_name != to.font_name {
+        tags.push(format!("\\fn{}", to.font_name));
+    }
+
+    if !floats_equal(from.font_size, to.font_size) {
+        tags.push(format!("\\fs{}", format_ass_float(to.font_size)));
+    }
+
+    if from.bold != to.bold {
+        tags.push(format!("\\b{}", if to.bold { 1 } else { 0 }));
+    }
+
+    if from.italic != to.italic {
+        tags.push(format!("\\i{}", if to.italic { 1 } else { 0 }));
+    }
+
+    if from.underline != to.underline {
+        tags.push(format!("\\u{}", if to.underline { 1 } else { 0 }));
+    }
+
+    if from.primary_color != to.primary_color {
+        tags.push(format!("\\c{}&", to.primary_color));
+    }
+
+    if from.primary_alpha != to.primary_alpha {
+        tags.push(format!("\\1a&H{:02X}&", to.primary_alpha));
+    }
+
+    if from.outline_color != to.outline_color {
+        tags.push(format!("\\3c{}&", to.outline_color));
+    }
+
+    if from.outline_alpha != to.outline_alpha {
+        tags.push(format!("\\3a&H{:02X}&", to.outline_alpha));
+    }
+
+    if from.back_color != to.back_color {
+        tags.push(format!("\\4c{}&", to.back_color));
+    }
+
+    if from.back_alpha != to.back_alpha {
+        tags.push(format!("\\4a&H{:02X}&", to.back_alpha));
+    }
+
+    if from.text_offset != to.text_offset {
+        let tag = match to.text_offset {
+            Some(0) => "\\ytsub",
+            Some(1) | Some(2) => "\\ytsup",
+            None => "\\ytsur",
+            _ => "\\ytsur",
+        };
+        tags.push(tag.to_string());
+    }
+
+    tags
+}
+
+fn find_pen(head: &Head, id: u32) -> Option<&Pen> {
+    head.pen.iter().find(|pen| pen.id == id)
+}
+
+fn derive_state(defaults: &StyleDefaults, pen: Option<&Pen>) -> FormattingState {
+    let mut state = FormattingState::from_defaults(defaults);
+    if let Some(pen) = pen {
+        state.apply_pen(pen, defaults);
+    }
+    state
+}
+
+fn first_text_pen<'a>(elements: &'a [BodyElement], head: &'a Head) -> Option<&'a Pen> {
+    for element in elements {
+        match element {
+            BodyElement::Span(span) => {
+                if let Some(inner) = &span.inner {
+                    let text = inner.text_clean_ass();
+                    if !text.trim().is_empty() {
+                        if let Some(id) = span.pen {
+                            if let Some(pen) = find_pen(head, id) {
+                                return Some(pen);
+                            }
+                        }
+                    }
+
+                    if let Some(pen) = first_text_pen(inner, head) {
+                        return Some(pen);
+                    }
+                }
+            }
+            BodyElement::Div(children) => {
+                if let Some(pen) = first_text_pen(children, head) {
+                    return Some(pen);
+                }
+            }
+            BodyElement::Paragraph(paragraph) => {
+                if let Some(pen) = first_text_pen(&paragraph.inner, head) {
+                    return Some(pen);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+fn render_body_elements(
+    elements: &[BodyElement],
+    head: &Head,
+    defaults: &StyleDefaults,
+    current_state: &mut FormattingState,
+) -> String {
+    let mut output = String::new();
+
+    for element in elements {
+        match element {
+            BodyElement::Span(span) => {
+                let mut target_state = current_state.clone();
+                if let Some(pen) = span.pen.and_then(|id| find_pen(head, id)) {
+                    target_state = derive_state(defaults, Some(pen));
+                }
+
+                let mut inner_state = target_state.clone();
+                let inner_output = span
+                    .inner
+                    .as_ref()
+                    .map(|inner| render_body_elements(inner, head, defaults, &mut inner_state))
+                    .unwrap_or_default();
+
+                if inner_output.is_empty() {
+                    continue;
+                }
+
+                let tags = transition_tags(current_state, &target_state);
+                if !tags.is_empty() {
+                    output.push_str(&format!("{{{}}}", tags.join("")));
+                }
+
+                output.push_str(&inner_output);
+                *current_state = inner_state;
+            }
+            BodyElement::Text(text) => {
+                output.push_str(&text.text_clean_ass());
+            }
+            BodyElement::Br(_) => {
+                output.push_str("\\N");
+            }
+            BodyElement::Div(children) => {
+                output.push_str(&render_body_elements(
+                    children,
+                    head,
+                    defaults,
+                    current_state,
+                ));
+            }
+            BodyElement::Paragraph(paragraph) => {
+                output.push_str(&render_body_elements(
+                    &paragraph.inner,
+                    head,
+                    defaults,
+                    current_state,
+                ));
+            }
+            BodyElement::Window(_) => {}
+        }
+    }
+
+    output
+}
+
+fn format_coord(value: f32) -> String {
+    if (value - value.floor()).abs() < f32::EPSILON {
+        format!("{}", value as i32)
+    } else {
+        let rounded = (value * 1000.0).round() / 1000.0;
+        let mut s = format!("{:.3}", rounded);
+        while s.contains('.') && s.ends_with('0') {
+            s.pop();
+        }
+        if s.ends_with('.') {
+            s.pop();
+        }
+        s
+    }
+}
+
+fn position_override(paragraph: &TimedTextParagraph, head: Option<&Head>) -> Option<String> {
+    let wp_id = paragraph.window_position?;
+    let head = head?;
+    let window_position = head.wp.iter().find(|wp| wp.id == wp_id)?;
+    let anchor_point = window_position.anchor_point.as_ref()?;
+
+    let alignment = match *anchor_point {
+        AnchorPoint::TopLeft => 7,
+        AnchorPoint::TopCenter => 8,
+        AnchorPoint::TopRight => 9,
+        AnchorPoint::MiddleLeft => 4,
+        AnchorPoint::Center => 5,
+        AnchorPoint::MiddleRight => 6,
+        AnchorPoint::BottomLeft => 1,
+        AnchorPoint::BottomCenter => 2,
+        AnchorPoint::BottomRight => 3,
+    };
+
+    let x = window_position
+        .horizontal_offset
+        .map(|ah| ((ah as f32) * 0.96 + 2.0) * 1280.0 / 100.0)
+        .unwrap_or(640.0);
+
+    let y = window_position
+        .vertical_offset
+        .map(|av| ((av as f32) * 0.96 + 2.0) * 720.0 / 100.0)
+        .unwrap_or(360.0);
+
+    let mut tag = String::new();
+    if alignment != 2 {
+        tag.push_str(&format!("\\an{}", alignment));
+    }
+    tag.push_str(&format!("\\pos({},{})", format_coord(x), format_coord(y)));
+
+    Some(tag)
 }
 
 // this will get the anchorpoint (ap) position from the srv3 and
@@ -154,14 +585,14 @@ impl AnchorPointExt for AnchorPoint {
     fn coordinates(&self) -> (i32, i32) {
         match self {
             AnchorPoint::TopLeft => (0, 0),
-            AnchorPoint::TopCenter => (640, 0),     // 1280/2
-            AnchorPoint::TopRight => (1280, 0),     // 1280
-            AnchorPoint::MiddleLeft => (0, 360),    // 720/2
-            AnchorPoint::Center => (640, 360),      // 1280/2, 720/2
-            AnchorPoint::MiddleRight => (1280, 360),// 1280, 720/2
-            AnchorPoint::BottomLeft => (0, 720),    // 720
-            AnchorPoint::BottomCenter => (640, 720),// 1280/2, 720
-            AnchorPoint::BottomRight => (1280, 720),// 1280, 720
+            AnchorPoint::TopCenter => (640, 0),      // 1280/2
+            AnchorPoint::TopRight => (1280, 0),      // 1280
+            AnchorPoint::MiddleLeft => (0, 360),     // 720/2
+            AnchorPoint::Center => (640, 360),       // 1280/2, 720/2
+            AnchorPoint::MiddleRight => (1280, 360), // 1280, 720/2
+            AnchorPoint::BottomLeft => (0, 720),     // 720
+            AnchorPoint::BottomCenter => (640, 720), // 1280/2, 720
+            AnchorPoint::BottomRight => (1280, 720), // 1280, 720
         }
     }
 }
@@ -173,7 +604,7 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle
     writeln!(&mut w, "Kind: captions").unwrap();
     writeln!(&mut w, "Language: en").unwrap();
     for element in paragraph {
-        writeln!(&mut w, "").unwrap();
+        writeln!(&mut w).unwrap();
         match element {
             BodyElement::Text(_text) => {}
             BodyElement::Paragraph(paragraph) => writeln!(
@@ -198,355 +629,111 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle
 }
 
 pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
-    let paragraph = &captions.body.elements;
+    const DEFAULT_STYLE: &str = "YTGlow";
+    const MARGIN_L: i32 = 0;
+    const MARGIN_R: i32 = 0;
+    const MARGIN_V: i32 = 0;
+    const LAYER: i32 = 0;
+    const PLAY_RES_X: i32 = 1280;
+    const PLAY_RES_Y: i32 = 720;
+
     let mut w = String::new();
-
-    let has_pens = captions.head.as_ref().map_or(false, |head| !head.pen.is_empty());
-    // we check if the file has pens and if it doesnt then dont write any formatting
-    // like the black bgcolor or something like that (&H000000)
-    // this is to make the resulting file nice and small
-
-    let default_style = "YTGlow"; // force YTGlow for non-formatted subs
-                                  // YTSC forces YTPlainBox but imo that doesn't look very good
-    let marginl = 25;
-    let marginr = 25;
-    let marginv = 15;
-
-    let layer = 0;
-    let name = "";
-    let effect = "";
-
-    let playresx = 1280;
-    let playresy = 720;
-    // not sure about a good way to get these, YTSC hardcodes them
-    // so thats what were doing!!!
-    // these are the default for ffmpeg vtt > ass conversion, so we use that
+    let head = captions.head.as_ref();
+    let has_pens = head.is_some_and(|h| !h.pen.is_empty());
 
     writeln!(&mut w, "[Script Info]").unwrap();
-
     writeln!(&mut w, "; Script generated by YTTML").unwrap();
     writeln!(&mut w, "; https://github.com/FyraLabs/yttml/").unwrap();
-
     writeln!(&mut w, "ScriptType: v4.00+").unwrap();
     writeln!(&mut w, "WrapStyle: 0").unwrap();
     writeln!(&mut w, "ScaledBorderAndShadow: yes").unwrap();
-    writeln!(&mut w, "PlayResX: {}", playresx).unwrap();
-    writeln!(&mut w, "PlayResY: {}", playresy).unwrap();
-    writeln!(&mut w, "").unwrap();
+    writeln!(&mut w, "PlayResX: {}", PLAY_RES_X).unwrap();
+    writeln!(&mut w, "PlayResY: {}", PLAY_RES_Y).unwrap();
+    w.push('\n');
 
     writeln!(&mut w, "[V4+ Styles]").unwrap();
     writeln!(&mut w, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").unwrap();
     writeln!(&mut w, "Style: YTPlain,Roboto,38,&H01FEFEFE,&HFF000000,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,25,25,15,1\nStyle: YTPlainBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H00000000,0,0,0,0,100,100,0,0,3,0.01,0,2,25,25,15,1\nStyle: YTGlow,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,2,0,2,25,25,15,1\nStyle: YTGlowBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1\nStyle: YTSoftShadow,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,0,4,2,25,25,15,1\nStyle: YTSoftShadowBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1\nStyle: YTHardShadow,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,0,4,2,25,25,15,1\nStyle: YTHardShadowBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1\nStyle: YTBevel,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,0,4,2,25,25,15,1\nStyle: YTBevelBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H00000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1").unwrap();
-    writeln!(&mut w, "").unwrap();
+    w.push('\n');
 
     writeln!(&mut w, "[Events]").unwrap();
-     writeln!(&mut w, "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text").unwrap();
-    for element in paragraph {
-        //println!("{:?}", element);
-        match element {
-            BodyElement::Paragraph(paragraph) => {
-                let position_str = if let Some(wp_id) = paragraph.window_position {
-                    if let Some(head) = &captions.head {
-                        if let Some(wp) = head.wp.iter().find(|wp| wp.id == wp_id) {
-                            if let Some(ap) = &wp.anchor_point {
-                                let alignment = match ap {
-                                    AnchorPoint::TopLeft => 7,
-                                    AnchorPoint::TopCenter => 8,
-                                    AnchorPoint::TopRight => 9,
-                                    AnchorPoint::MiddleLeft => 4,
-                                    AnchorPoint::Center => 5,
-                                    AnchorPoint::MiddleRight => 6,
-                                    AnchorPoint::BottomLeft => 1,
-                                    AnchorPoint::BottomCenter => 2,
-                                    AnchorPoint::BottomRight => 3,
-                                };
+    writeln!(
+        &mut w,
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
+    )
+    .unwrap();
 
-                                // Convert percentage coordinates to pixel coordinates
-                                let x = if let Some(ah) = wp.horizontal_offset {
-                                    let effective_percent = (ah as f32 * 0.96) + 2.0;
-                                    effective_percent * 1280.0 / 100.0
-                                } else {
-                                    640.0  // Center
-                                };
+    for element in &captions.body.elements {
+        if let BodyElement::Paragraph(paragraph) = element {
+            let start = Moment::from(paragraph.timestamp as i64);
+            let end = Moment::from((paragraph.timestamp + paragraph.duration) as i64);
+            let start_ts = Moment::as_substation_timestamp(&start);
+            let end_ts = Moment::as_substation_timestamp(&end);
 
-                                let y = if let Some(av) = wp.vertical_offset {
-                                    let effective_percent = (av as f32 * 0.96) + 2.0;
-                                    effective_percent * 720.0 / 100.0
-                                } else {
-                                    360.0  // Center
-                                };
+            let mut style_name: &'static str = DEFAULT_STYLE;
+            let text: String;
 
-                                // Helper function to format position coordinates
-                                // Shows whole numbers without decimals, otherwise shows up to 3 decimals
-                                let format_coord = |val: f32| -> String {
-                                    if val == val.floor() {
-                                        format!("{}", val as i32)
-                                    } else {
-                                        // Round to 3 decimal places and trim trailing zeros
-                                        let rounded = (val * 1000.0).round() / 1000.0;
-                                        format!("{:.3}", rounded).trim_end_matches('0').trim_end_matches('.').to_string()
-                                    }
-                                };
+            if has_pens {
+                if let Some(head) = head {
+                    let base_pen = first_text_pen(&paragraph.inner, head);
+                    style_name = choose_style_for_pen(base_pen);
+                    let defaults = style_defaults(style_name);
+                    let default_state = FormattingState::from_defaults(&defaults);
+                    let mut line_state = default_state.clone();
+                    if let Some(pen) = base_pen {
+                        line_state.apply_pen(pen, &defaults);
+                    }
 
-                                format!("\\an{}\\pos({},{})",
-                                    if alignment != 2 { alignment.to_string() } else { String::new() },
-                                    format_coord(x),
-                                    format_coord(y)
-                                )
+                    let mut override_tags = Vec::new();
+                    if let Some(position_tag) = position_override(paragraph, Some(head)) {
+                        override_tags.push(position_tag);
+                    }
+                    override_tags.extend(transition_tags(&default_state, &line_state));
 
-                            } else {
-                                String::new()
-                            }
-                        } else {
-                            String::new()
-                        }
+                    let prefix = if !override_tags.is_empty() {
+                        format!("{{{}}}", override_tags.join(""))
                     } else {
                         String::new()
+                    };
+
+                    let mut current_state = line_state.clone();
+                    let body_text =
+                        render_body_elements(&paragraph.inner, head, &defaults, &mut current_state);
+                    text = format!("{}{}", prefix, body_text);
+                } else {
+                    let mut override_tags = Vec::new();
+                    if let Some(position_tag) = position_override(paragraph, None) {
+                        override_tags.push(position_tag);
                     }
+                    let prefix = if !override_tags.is_empty() {
+                        format!("{{{}}}", override_tags.join(""))
+                    } else {
+                        String::new()
+                    };
+                    text = format!("{}{}", prefix, paragraph.inner.text_clean_ass());
+                }
+            } else {
+                let mut override_tags = Vec::new();
+                if let Some(position_tag) = position_override(paragraph, head) {
+                    override_tags.push(position_tag);
+                }
+                let prefix = if !override_tags.is_empty() {
+                    format!("{{{}}}", override_tags.join(""))
                 } else {
                     String::new()
                 };
-                if !has_pens {
-                    writeln!(
-                        &mut w,
-                        "Dialogue: {},{},{},{},{},{},{},{},{},{}{}",
-                        layer,
-                        aspasia::timing::Moment::as_substation_timestamp(
-                            &aspasia::timing::Moment::from(paragraph.timestamp as i64)
-                        ),
-                        aspasia::timing::Moment::as_substation_timestamp(
-                            &aspasia::timing::Moment::from(paragraph.timestamp as i64 + paragraph.duration as i64)
-                        ),
-                        default_style,
-                        name,
-                        marginl,
-                        marginr,
-                        marginv,
-                        effect,
-                        "", // if we dont have pens (the color) dont write the color
-                            // there is definitely a cleaner way of doing this but this works
-                        paragraph.inner.text_clean_ass()
-                    ).unwrap();
-                } else {
-                    if let Some(head) = &captions.head {
-                        let text_span_pen_id = paragraph.inner.iter()
-                            .filter_map(|elem| {
-                                if let BodyElement::Span(span) = elem {
-                                    let has_text = span.inner.as_ref()
-                                        .map(|inner| {
-                                            let text = inner.text();
-                                            let binding = text.replace("\u{200b}", "");
-                                            let cleaned_text = binding.trim();
-                                            !cleaned_text.is_empty()
-                                        })
-                                        .unwrap_or(false);
-
-                                    if has_text {
-                                        span.pen
-                                    } else {
-                                        None
-                                    }
-                                } else {
-                                    None
-                                }
-                            })
-                            .next();
-
-                        if let Some(pen_id) = text_span_pen_id {
-                            let pen = head.pen.iter().find(|pen| pen.id == pen_id);
-
-                            // Get background alpha for tertiary color (background box)
-                            // ASS alpha is inverted: 0 = opaque, 255 = transparent
-                            // So ASS_alpha = 255 - SRV3_opacity
-                            let bg_alpha = pen.and_then(|pen| pen.background_opacity)
-                               .map(|opacity| {
-                                   let alpha = 255 - opacity;
-                                   format!("&H{:02X}&", alpha)
-                               })
-                               .unwrap_or_else(|| String::from("&HFF&")); // Default fully transparent
-
-                            let font_family = pen.and_then(|pen| pen.font_style.as_ref())
-                                .map(|fs| match fs {
-                                    FontStyle::Default | FontStyle::ProportionalSans => "\\fnRoboto",
-                                    FontStyle::MonoSerif => "\\fnCourier New",
-                                    FontStyle::ProportionalSerif => "\\fnTimes New Roman",
-                                    FontStyle::MonoSans => "\\fnLucida Console",
-                                    FontStyle::Casual => "\\fnComic Sans MS",
-                                    FontStyle::Cursive => "\\fnMonotype Corsiva",
-                                    FontStyle::SmallCaps => "\\fnArial",
-                                })
-                                .unwrap_or_default();
-
-                            let style = if let Some(pen) = pen {
-                                match pen.edge_type {
-                                    Some(EdgeType::HardShadow) => {
-                                        if pen.background_opacity.unwrap_or(0) > 0 {
-                                            "YTHardShadowBox"
-                                        } else {
-                                            "YTHardShadow"
-                                        }
-                                    }
-                                    Some(EdgeType::Bevel) => {
-                                        if pen.background_opacity.unwrap_or(0) > 0 {
-                                            "YTBevelBox"
-                                        } else {
-                                            "YTBevel"
-                                        }
-                                    }
-                                    Some(EdgeType::Glow) => {
-                                        if pen.background_opacity.unwrap_or(0) > 0 {
-                                            "YTGlowBox"
-                                        } else {
-                                            "YTGlow"
-                                        }
-                                    }
-                                    Some(EdgeType::SoftShadow) => {
-                                        if pen.background_opacity.unwrap_or(0) > 0 {
-                                            "YTSoftShadowBox"
-                                        } else {
-                                            "YTSoftShadow"
-                                        }
-                                    }
-                                    Some(EdgeType::None) | None => {
-                                        // No edge type - check if we have a box (background opacity)
-                                        if pen.background_opacity.unwrap_or(0) > 0 {
-                                            "YTPlainBox"
-                                        } else {
-                                            "YTPlain"
-                                        }
-                                    }
-                                }
-                            } else {
-                                "YTPlain"
-                            };
-
-                            // process each span with its own font size and text offset
-                            // Track previous formatting state to emit transition tags
-                            let mut prev_offset: Option<&srv3_ttml::TextOffset> = None;
-                            let mut prev_bold: Option<bool> = None;
-                            let mut prev_italic: Option<bool> = None;
-                            let mut prev_underline: Option<bool> = None;
-                            
-                            let formatted_text = paragraph.inner.iter().map(|elem| {
-                                if let BodyElement::Span(span) = elem {
-                                    if let Some(span_pen_id) = span.pen {
-                                        if let Some(span_pen) = head.pen.iter().find(|p| p.id == span_pen_id) {
-                                            // get font size for the correct span, only if different from default
-                                            let size_tag = span_pen.font_size.and_then(|size| {
-                                                if size == 100 {
-                                                    None  // Don't add tag for default size
-                                                } else {
-                                                    let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
-                                                    let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
-                                                    Some(format!("{{\\fs{}}}", relative_size))
-                                                }
-                                            }).unwrap_or_default();
-
-                                            // get bold tag - only emit when state changes
-                                            let current_bold = span_pen.bold.unwrap_or(false);
-                                            let bold_tag = match prev_bold {
-                                                Some(prev) if prev != current_bold => {
-                                                    if current_bold { "{\\b1}" } else { "{\\b0}" }
-                                                }
-                                                None if current_bold => "{\\b1}",
-                                                _ => "",
-                                            };
-                                            prev_bold = Some(current_bold);
-
-                                            // get italic tag - only emit when state changes
-                                            let current_italic = span_pen.italic.unwrap_or(false);
-                                            let italic_tag = match prev_italic {
-                                                Some(prev) if prev != current_italic => {
-                                                    if current_italic { "{\\i1}" } else { "{\\i0}" }
-                                                }
-                                                None if current_italic => "{\\i1}",
-                                                _ => "",
-                                            };
-                                            prev_italic = Some(current_italic);
-
-                                            // get underline tag - only emit when state changes
-                                            let current_underline = span_pen.underline.unwrap_or(false);
-                                            let underline_tag = match prev_underline {
-                                                Some(prev) if prev != current_underline => {
-                                                    if current_underline { "{\\u1}" } else { "{\\u0}" }
-                                                }
-                                                None if current_underline => "{\\u1}",
-                                                _ => "",
-                                            };
-                                            prev_underline = Some(current_underline);
-
-                                            // get text offset tag (subscript/superscript)
-                                            let offset_tag = match (&prev_offset, &span_pen.text_offset) {
-                                                // Transitioning from subscript/superscript to regular (no offset)
-                                                (Some(_), None) => "{\\ytsur}",
-                                                // Transitioning to subscript
-                                                (_, Some(srv3_ttml::TextOffset::Subscript)) => "{\\ytsub}",
-                                                // Transitioning to superscript
-                                                (_, Some(srv3_ttml::TextOffset::Superscript | srv3_ttml::TextOffset::SuperscriptAlt)) => "{\\ytsup}",
-                                                // No change or no offset
-                                                _ => "",
-                                            };
-                                            
-                                            // Update previous offset state
-                                            prev_offset = span_pen.text_offset.as_ref();
-
-                                            format!("{}{}{}{}{}{}", size_tag, bold_tag, italic_tag, underline_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass()))
-                                        } else {
-                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass())
-                                        }
-                                    } else {
-                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass())
-                                    }
-                                } else {
-                                    elem.text_clean_ass()
-                                }
-                            }).collect::<String>();
-
-                            // Merge first override tag into the main override block
-                            // If formatted_text starts with {\tag}, extract \tag and move it to the override block
-                            let (merged_tag, remaining_text) = if formatted_text.starts_with('{') {
-                                if let Some(end_pos) = formatted_text.find('}') {
-                                    let tag = &formatted_text[1..end_pos]; // Extract tag without braces
-                                    let rest = &formatted_text[end_pos+1..]; // Everything after the closing brace
-                                    (tag.to_string(), rest.to_string())
-                                } else {
-                                    (String::new(), formatted_text)
-                                }
-                            } else {
-                                (String::new(), formatted_text)
-                            };
-
-                            writeln!(
-                                &mut w,
-                                "Dialogue: {},{},{},{},{},{},{},{},{},{{{}\\3a{}{}{}}}{}",
-                                layer,
-                                aspasia::timing::Moment::as_substation_timestamp(
-                                    &aspasia::timing::Moment::from(paragraph.timestamp as i64)
-                                ),
-                                aspasia::timing::Moment::as_substation_timestamp(
-                                    &aspasia::timing::Moment::from(paragraph.timestamp as i64 + paragraph.duration as i64)
-                                ),
-                                style,
-                                name,
-                                marginl,
-                                marginr,
-                                marginv,
-                                effect,
-                                position_str,
-                                bg_alpha,
-                                font_family,
-                                merged_tag,
-                                remaining_text
-                            ).unwrap();
-                        }
-                    }
-                }
+                text = format!("{}{}", prefix, paragraph.inner.text_clean_ass());
             }
-            _ => {}
+
+            writeln!(
+                &mut w,
+                "Dialogue: {},{},{},{},,{},{},{},,{}",
+                LAYER, start_ts, end_ts, style_name, MARGIN_L, MARGIN_R, MARGIN_V, text
+            )
+            .unwrap();
         }
     }
 
-    //println!("{}", w);
     Ok(w)
 }
 

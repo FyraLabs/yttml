@@ -1,8 +1,7 @@
-use std::str::FromStr;
 use hex_color::HexColor;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-
+use std::str::FromStr;
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename = "timedtext")]
@@ -151,9 +150,6 @@ pub struct Pen {
     pub text_emphasis: Option<TextEmphasis>,
 }
 
-
-
-
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum Justify {
@@ -176,9 +172,8 @@ pub enum TextEmphasis {
 pub enum TextOffset {
     Subscript = 0,
     Superscript = 1,
-    SuperscriptAlt = 2,  // Alternative encoding, treat as superscript
+    SuperscriptAlt = 2, // Alternative encoding, treat as superscript
 }
-
 
 /// Ruby text
 ///
@@ -223,7 +218,6 @@ pub enum EdgeType {
     SoftShadow = 4,
 }
 
-
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum FontStyle {
@@ -251,7 +245,7 @@ pub enum FontStyle {
     Cursive = 6,
     /// Small Capitals.
     /// Arial with `font-variant: small-caps`
-    SmallCaps = 7
+    SmallCaps = 7,
 }
 
 impl Default for FontStyle {
@@ -299,7 +293,6 @@ pub struct WindowPosition {
     // subtitles move towards the sides and even out of the video.
     // The player transforms the coordinates according to effectiveCoord = (specifiedCoord * 0.96) + 2,
     // meaning subtitles don't appear *quite* where you want them to
-
     /// X position from anchor point
     #[serde(rename = "@ah")]
     pub horizontal_offset: Option<i32>,
@@ -342,15 +335,26 @@ pub struct WindowStyle {
     pub fill_opacity: Option<u8>,
 }
 
-#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize_repr, Deserialize_repr)]
+#[derive(
+    Debug,
+    Default,
+    Clone,
+    Copy,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Ord,
+    Hash,
+    Serialize_repr,
+    Deserialize_repr,
+)]
 #[repr(u8)]
 pub enum ModeHint {
-  #[default]
-  None = 0,
-  Default = 1,
-  Scroll = 2,
+    #[default]
+    None = 0,
+    Default = 1,
+    Scroll = 2,
 }
-
 
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u32)]
@@ -370,14 +374,14 @@ pub struct Body {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub struct Window {
-  #[serde(rename = "@id")]
-  pub id: u32,
-  #[serde(rename = "@t")]
-  pub time_millis: u32,
-  #[serde(rename = "@wp")]
-  pub window_position_id: u32,
-  #[serde(rename = "@ws")]
-  pub window_style_id: u32,
+    #[serde(rename = "@id")]
+    pub id: u32,
+    #[serde(rename = "@t")]
+    pub time_millis: u32,
+    #[serde(rename = "@wp")]
+    pub window_position_id: u32,
+    #[serde(rename = "@ws")]
+    pub window_style_id: u32,
 }
 
 // --- The body ---
@@ -431,7 +435,9 @@ impl ElementExt for Vec<BodyElement> {
     fn text(&self) -> String {
         // add newlines between paragraphs
         self.iter()
-            .fold(String::new(), |acc, elem| acc + &elem.text() + "\n").trim().to_string()
+            .fold(String::new(), |acc, elem| acc + &elem.text() + "\n")
+            .trim()
+            .to_string()
     }
 }
 
@@ -574,7 +580,6 @@ mod tests {
 
         let xml = quick_xml::se::to_string(&parse).unwrap();
         println!("```xml\n{}\n```", xml);
-
     }
 
     // TODO: So formatted files with <s> tags inside the <p> tags are not parsed correctly
