@@ -25,8 +25,11 @@ Cargo.lock
 
 /target
 
+
 test_output/
 *.srv3
 *.ass
 !tests/**
 *.webm
+*.mp4
+*.mkv
