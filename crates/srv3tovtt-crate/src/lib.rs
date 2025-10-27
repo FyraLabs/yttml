@@ -72,6 +72,124 @@ fn clamp_u32_to_u8(value: u32) -> u8 {
     }
 }
 
+const MARKER_NEWLINE: &str = "__YTTML_ASS_NEWLINE__";
+const MARKER_LIT_UPPER_N: &str = "__YTTML_ASS_LITERAL_N__";
+const MARKER_LIT_LOWER_N: &str = "__YTTML_ASS_LITERAL_n__";
+const MARKER_LIT_UPPER_H: &str = "__YTTML_ASS_LITERAL_H__";
+const MARKER_LIT_LOWER_H: &str = "__YTTML_ASS_LITERAL_h__";
+const MARKER_LIT_LBRACE: &str = "__YTTML_ASS_LITERAL_LBRACE__";
+const MARKER_LIT_RBRACE: &str = "__YTTML_ASS_LITERAL_RBRACE__";
+const NO_ANDROID_DARK_TEXT_HACK: &str = "no_android_dark_text_hack";
+
+fn paragraph_has_visible_pen(elements: &[BodyElement], head: &Head) -> bool {
+    fn helper(elements: &[BodyElement], head: &Head, found: &mut bool) -> bool {
+        let mut visible = false;
+
+        for element in elements {
+            match element {
+                BodyElement::Span(span) => {
+                    if let Some(id) = span.pen {
+                        if let Some(pen) = find_pen(head, id) {
+                            *found = true;
+                            let opacity = pen.foreground_opacity;
+                            if opacity != Some(0) {
+                                visible = true;
+                            }
+                        }
+                    }
+
+                    if let Some(inner) = span.inner.as_deref() {
+                        if helper(inner, head, found) {
+                            visible = true;
+                        }
+                    }
+                }
+                BodyElement::Paragraph(paragraph) => {
+                    if helper(&paragraph.inner, head, found) {
+                        visible = true;
+                    }
+                }
+                BodyElement::Div(children) => {
+                    if helper(children, head, found) {
+                        visible = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        visible
+    }
+
+    let mut found_pen = false;
+    let visible = helper(elements, head, &mut found_pen);
+    if !found_pen {
+        true
+    } else {
+        visible
+    }
+}
+
+fn prepare_ass_text(input: &str) -> String {
+    let mut cleaned = String::with_capacity(input.len());
+    for ch in input.chars() {
+        if ch != '\u{200B}' {
+            cleaned.push(ch);
+        }
+    }
+
+    let mut output = String::with_capacity(cleaned.len());
+    let mut iter = cleaned.chars().peekable();
+    while let Some(ch) = iter.next() {
+        if ch == '\\' {
+            if let Some(next) = iter.peek().copied() {
+                match next {
+                    'N' => {
+                        iter.next();
+                        output.push_str(MARKER_LIT_UPPER_N);
+                        continue;
+                    }
+                    'n' => {
+                        iter.next();
+                        output.push_str(MARKER_LIT_LOWER_N);
+                        continue;
+                    }
+                    'H' => {
+                        iter.next();
+                        output.push_str(MARKER_LIT_UPPER_H);
+                        continue;
+                    }
+                    'h' => {
+                        iter.next();
+                        output.push_str(MARKER_LIT_LOWER_H);
+                        continue;
+                    }
+                    '{' => {
+                        iter.next();
+                        output.push_str(MARKER_LIT_LBRACE);
+                        continue;
+                    }
+                    '}' => {
+                        iter.next();
+                        output.push_str(MARKER_LIT_RBRACE);
+                        continue;
+                    }
+                    _ => {}
+                }
+            }
+            output.push('\\');
+        } else if ch == '\r' {
+            continue;
+        } else if ch == '\n' {
+            output.push_str(MARKER_NEWLINE);
+        } else {
+            output.push(ch);
+        }
+    }
+
+    output
+}
+
 #[derive(Clone, Debug)]
 struct StyleDefaults {
     font_name: String,
@@ -137,7 +255,7 @@ impl ElementExt for String {
     }
 
     fn text_clean_ass(&self) -> String {
-        self.replace('\u{200B}', "").replace('\n', "\\N")
+        prepare_ass_text(self)
     }
 }
 
@@ -471,16 +589,16 @@ fn sanitize_ass_text(mut text: String) -> String {
         return text;
     }
 
-    text = text.replace("\r\n", "\\N");
+    text = text.replace("\r\n", "\n");
+    text = text.replace('\r', "\n");
     text = text.replace('\u{00A0}', "\\h");
-    text = text.replace("\\N", "\\{}N");
-    text = text.replace("\\n", "\\{}n");
-    text = text.replace("\\H", "\\{}H");
-    text = text.replace("\\h", "\\{}h");
-    text = text.replace("\\{}N ", "\\{}N");
-    text = text.replace(" \\{}N", "\\{}N");
-    text = text.replace("\\{}n ", "\\{}n");
-    text = text.replace(" \\{}n", "\\{}n");
+    text = text.replace(MARKER_NEWLINE, "\\N");
+    text = text.replace(MARKER_LIT_UPPER_N, "\\{}N");
+    text = text.replace(MARKER_LIT_LOWER_N, "\\{}n");
+    text = text.replace(MARKER_LIT_UPPER_H, "\\{}H");
+    text = text.replace(MARKER_LIT_LOWER_H, "\\{}h");
+    text = text.replace(MARKER_LIT_LBRACE, "\\{");
+    text = text.replace(MARKER_LIT_RBRACE, "\\}");
 
     fn strip_redundant_tags(text: &mut String, newline: &str) {
         let pattern = format!("}}{}", newline);
@@ -493,10 +611,20 @@ fn sanitize_ass_text(mut text: String) -> String {
         }
     }
 
-    strip_redundant_tags(&mut text, "\\{}N");
-    strip_redundant_tags(&mut text, "\\{}n");
+    strip_redundant_tags(&mut text, "\\N");
+    strip_redundant_tags(&mut text, "\\n");
 
     text
+}
+
+fn ass_placeholders_to_plain_text(text: &str) -> String {
+    text.replace(MARKER_NEWLINE, "\n")
+        .replace(MARKER_LIT_UPPER_N, "\\N")
+        .replace(MARKER_LIT_LOWER_N, "\\n")
+        .replace(MARKER_LIT_UPPER_H, "\\H")
+        .replace(MARKER_LIT_LOWER_H, "\\h")
+        .replace(MARKER_LIT_LBRACE, "{")
+        .replace(MARKER_LIT_RBRACE, "}")
 }
 
 fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> {
@@ -589,7 +717,14 @@ fn collect_pen_usage(
                     usage.push(props);
                 }
             }
-            BodyElement::Text(_) => {
+            BodyElement::Text(text) => {
+                let has_visible_char = text
+                    .chars()
+                    .any(|ch| ch != '\u{200B}' && !ch.is_whitespace());
+                if !has_visible_char {
+                    continue;
+                }
+
                 if let Some(pen) = inherited {
                     usage.push(pen_usage_from_pen(pen));
                 } else {
@@ -637,55 +772,6 @@ fn default_pen_usage() -> PenUsage {
         fore_alpha: 254,
         back_alpha: 0,
         has_shadow: false,
-    }
-}
-
-fn paragraph_has_visible_pen(elements: &[BodyElement], head: &Head) -> bool {
-    fn helper(elements: &[BodyElement], head: &Head, found: &mut bool) -> bool {
-        let mut visible = false;
-
-        for element in elements {
-            match element {
-                BodyElement::Span(span) => {
-                    if let Some(id) = span.pen {
-                        if let Some(pen) = find_pen(head, id) {
-                            *found = true;
-                            let opacity = pen.foreground_opacity;
-                            if opacity != Some(0) {
-                                visible = true;
-                            }
-                        }
-                    }
-
-                    if let Some(inner) = span.inner.as_deref() {
-                        if helper(inner, head, found) {
-                            visible = true;
-                        }
-                    }
-                }
-                BodyElement::Paragraph(paragraph) => {
-                    if helper(&paragraph.inner, head, found) {
-                        visible = true;
-                    }
-                }
-                BodyElement::Div(children) => {
-                    if helper(children, head, found) {
-                        visible = true;
-                    }
-                }
-                _ => {}
-            }
-        }
-
-        visible
-    }
-
-    let mut found_pen = false;
-    let visible = helper(elements, head, &mut found_pen);
-    if !found_pen {
-        true
-    } else {
-        visible
     }
 }
 
@@ -939,41 +1025,83 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
             let end_ts = Moment::as_substation_timestamp(&end);
 
             let mut style_name: &'static str = DEFAULT_STYLE;
+            let mut effect: Option<&'static str> = None;
+            let mut skip_line = false;
             let text: String;
 
             if let Some(head) = head {
-                if !paragraph_has_visible_pen(&paragraph.inner, head) {
-                    continue;
-                }
-
                 let mut usage = Vec::new();
                 collect_pen_usage(&paragraph.inner, head, None, &mut usage);
+                #[cfg(debug_assertions)]
+                if paragraph.timestamp == 10060 {
+                    for (idx, props) in usage.iter().enumerate() {
+                        eprintln!(
+                            "usage[{idx}] -> is_dark={} fore_alpha={} back_alpha={} has_shadow={}",
+                            props.is_dark, props.fore_alpha, props.back_alpha, props.has_shadow
+                        );
+                    }
+                }
                 let line_has_dark_text = usage
                     .iter()
                     .any(|props| props.is_dark && props.fore_alpha > 0);
-                let line_is_android_fallback = usage.iter().all(|props| {
-                    !props.is_dark
-                        && props.fore_alpha == 0
-                        && props.back_alpha == 0
-                        && !props.has_shadow
-                });
+                let line_is_android_fallback = !usage.is_empty()
+                    && usage.iter().all(|props| {
+                        props.fore_alpha == 0 && props.back_alpha == 0 && !props.has_shadow
+                    });
 
-                let plain_text = paragraph.inner.text_clean_ass().replace("\\N", "\n");
+                #[cfg(debug_assertions)]
+                if paragraph.timestamp == 10060 {
+                    eprintln!(
+                        "pre-check: start={} fallback={} visible={} usage={}",
+                        start_ts,
+                        line_is_android_fallback,
+                        paragraph_has_visible_pen(&paragraph.inner, head),
+                        usage.len()
+                    );
+                }
+
+                if !line_is_android_fallback && !paragraph_has_visible_pen(&paragraph.inner, head) {
+                    continue;
+                }
+
+                let raw_text = paragraph.inner.text_clean_ass();
+                let plain_text = ass_placeholders_to_plain_text(&raw_text);
+
+                #[cfg(debug_assertions)]
+                if paragraph.timestamp == 10060 {
+                    eprintln!(
+                        "debug android fallback: start={} fallback={} dark={} usage={} text={}",
+                        start_ts,
+                        line_is_android_fallback,
+                        line_has_dark_text,
+                        usage.len(),
+                        plain_text
+                    );
+                }
+
+                if usage.is_empty() && plain_text.trim().is_empty() {
+                    continue;
+                }
 
                 if line_has_dark_text {
                     awaiting_android_hack = true;
                 } else if awaiting_android_hack {
-                    awaiting_android_hack = false;
-
                     if let Some((prev_start, prev_end, prev_text)) = previous_line_info.as_ref() {
                         if line_is_android_fallback
                             && prev_start == &start
                             && prev_end == &end
                             && prev_text == &plain_text
                         {
-                            continue;
+                            skip_line = true;
+                        } else {
+                            effect = Some(NO_ANDROID_DARK_TEXT_HACK);
                         }
                     }
+                    awaiting_android_hack = false;
+                }
+
+                if skip_line {
+                    continue;
                 }
 
                 previous_line_info = Some((start, end, plain_text.clone()));
@@ -1039,13 +1167,21 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                 text = format!("{}{}", prefix, body_text);
             }
 
+            let effect_field = effect.unwrap_or("");
             writeln!(
                 &mut w,
-                "Dialogue: {},{},{},{},,{},{},{},,{}",
-                LAYER, start_ts, end_ts, style_name, MARGIN_L, MARGIN_R, MARGIN_V, text
+                "Dialogue: {},{},{},{},,{},{},{},{},{}",
+                LAYER,
+                start_ts,
+                end_ts,
+                style_name,
+                MARGIN_L,
+                MARGIN_R,
+                MARGIN_V,
+                effect_field,
+                text
             )
             .unwrap();
-            println!("{} {} {}", start_ts, style_name, text);
         }
     }
 
