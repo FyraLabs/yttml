@@ -132,8 +132,6 @@ impl ElementExt for Paragraph {
             .map(|elem| elem.text())
             .collect::<Vec<_>>()
             .join("")
-            .trim()
-            .to_string()
     }
 }
 
@@ -143,8 +141,6 @@ impl ElementExt for Vec<BodyElement> {
             .map(|elem| elem.text())
             .collect::<Vec<_>>()
             .join("")
-            .trim()
-            .to_string()
     }
 }
 
@@ -280,10 +276,22 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                     360.0  // Center
                                 };
 
-                                format!("\\an{}\\pos({:.3},{:.3})",
+                                // Helper function to format position coordinates
+                                // Shows whole numbers without decimals, otherwise shows up to 3 decimals
+                                let format_coord = |val: f32| -> String {
+                                    if val == val.floor() {
+                                        format!("{}", val as i32)
+                                    } else {
+                                        // Round to 3 decimal places and trim trailing zeros
+                                        let rounded = (val * 1000.0).round() / 1000.0;
+                                        format!("{:.3}", rounded).trim_end_matches('0').trim_end_matches('.').to_string()
+                                    }
+                                };
+
+                                format!("\\an{}\\pos({},{})",
                                     if alignment != 2 { alignment.to_string() } else { String::new() },
-                                    x,
-                                    y
+                                    format_coord(x),
+                                    format_coord(y)
                                 )
 
                             } else {
