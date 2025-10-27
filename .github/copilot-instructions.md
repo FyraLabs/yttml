@@ -10,6 +10,8 @@ YTTML is a Rust toolkit for working with YouTube's proprietary SRV3 (Server 3) s
 - `crates/srv3-ttml/`: Core SRV3 parser library using serde for XML deserialization
 - `crates/srv3tovtt-crate/`: Format conversion library (SRV3 → VTT/SRT/ASS)
 - `src/main.rs`: CLI tool for parsing and converting SRV3 files
+- `reference/YTSubConverter`: Original reference code as a Git submodule
+- `tests/ass`: SRV3-ASS Conversion tests
 - Root-level SRV3 samples for testing (Japanese titles, multiple languages)
 
 ### Core Domain Model

@@ -1,9 +1,11 @@
+use clap::Parser;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::str::FromStr;
-
-use clap::Parser;
+#[cfg(test)]
+mod ass_test_helpers;
+#[cfg(test)]
+mod tests;
 
 #[derive(Parser)]
 #[clap(

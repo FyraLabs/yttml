@@ -27,5 +27,5 @@ Cargo.lock
 
 *.srv3
 *.ass
-!tests/*
+!tests/**
 *.webm
