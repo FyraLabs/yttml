@@ -79,6 +79,7 @@ cargo run -- parse "crates/srv3-ttml/test/aishite.srv3" --format ass
 - Include real SRV3 samples in `test/` directories
 - Test both formatted (with pens) and unformatted subtitle files
 - Test round-trip parsing: SRV3 → struct → XML should match
+- When running shell commands, consider explicitly running Bash - `bash -c "<command>"` Fish does not support heredocs
 
 ### Performance Notes
 - ASS conversion optimizes for file size by omitting default styling when no pens exist

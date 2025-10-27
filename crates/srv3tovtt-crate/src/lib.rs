@@ -257,7 +257,8 @@ impl FormattingState {
         }
 
         if let Some(opacity) = pen.background_opacity {
-            self.back_alpha = 255u8.saturating_sub(opacity);
+            // YouTube encodes box/glow opacity in the outline channel; match YTSubConverter.
+            self.outline_alpha = 255u8.saturating_sub(opacity);
         }
 
         if let Some(color) = pen.background_color.as_ref() {
@@ -351,6 +352,10 @@ fn floats_equal(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.0005
 }
 
+fn trim_ass_edge_whitespace(text: String) -> String {
+    text.trim_matches([' ', '\u{200B}']).to_string()
+}
+
 fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> {
     let mut tags = Vec::new();
 
@@ -415,14 +420,6 @@ fn find_pen(head: &Head, id: u32) -> Option<&Pen> {
     head.pen.iter().find(|pen| pen.id == id)
 }
 
-fn derive_state(defaults: &StyleDefaults, pen: Option<&Pen>) -> FormattingState {
-    let mut state = FormattingState::from_defaults(defaults);
-    if let Some(pen) = pen {
-        state.apply_pen(pen, defaults);
-    }
-    state
-}
-
 fn first_text_pen<'a>(elements: &'a [BodyElement], head: &'a Head) -> Option<&'a Pen> {
     for element in elements {
         match element {
@@ -471,7 +468,7 @@ fn render_body_elements(
             BodyElement::Span(span) => {
                 let mut target_state = current_state.clone();
                 if let Some(pen) = span.pen.and_then(|id| find_pen(head, id)) {
-                    target_state = derive_state(defaults, Some(pen));
+                    target_state.apply_pen(pen, defaults);
                 }
 
                 let mut inner_state = target_state.clone();
@@ -699,6 +696,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                     let mut current_state = line_state.clone();
                     let body_text =
                         render_body_elements(&paragraph.inner, head, &defaults, &mut current_state);
+                    let body_text = trim_ass_edge_whitespace(body_text);
                     text = format!("{}{}", prefix, body_text);
                 } else {
                     let mut override_tags = Vec::new();
@@ -710,7 +708,9 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                     } else {
                         String::new()
                     };
-                    text = format!("{}{}", prefix, paragraph.inner.text_clean_ass());
+                    let body_text = paragraph.inner.text_clean_ass();
+                    let body_text = trim_ass_edge_whitespace(body_text);
+                    text = format!("{}{}", prefix, body_text);
                 }
             } else {
                 let mut override_tags = Vec::new();
@@ -722,7 +722,9 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                 } else {
                     String::new()
                 };
-                text = format!("{}{}", prefix, paragraph.inner.text_clean_ass());
+                let body_text = paragraph.inner.text_clean_ass();
+                let body_text = trim_ass_edge_whitespace(body_text);
+                text = format!("{}{}", prefix, body_text);
             }
 
             writeln!(
