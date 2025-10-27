@@ -364,14 +364,45 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
 
                             let style = if let Some(pen) = pen {
                                 match pen.edge_type {
-                                    Some(EdgeType::HardShadow) => "YTHardShadow",
-                                    Some(EdgeType::Bevel) => "YTBevel",
-                                    Some(EdgeType::Glow) => "YTGlow",
-                                    Some(EdgeType::SoftShadow) => "YTSoftShadow",
-                                    Some(EdgeType::None) | None => "YTGlow"
+                                    Some(EdgeType::HardShadow) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTHardShadowBox"
+                                        } else {
+                                            "YTHardShadow"
+                                        }
+                                    }
+                                    Some(EdgeType::Bevel) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTBevelBox"
+                                        } else {
+                                            "YTBevel"
+                                        }
+                                    }
+                                    Some(EdgeType::Glow) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTGlowBox"
+                                        } else {
+                                            "YTGlow"
+                                        }
+                                    }
+                                    Some(EdgeType::SoftShadow) => {
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTSoftShadowBox"
+                                        } else {
+                                            "YTSoftShadow"
+                                        }
+                                    }
+                                    Some(EdgeType::None) | None => {
+                                        // No edge type - check if we have a box (background opacity)
+                                        if pen.background_opacity.unwrap_or(0) > 0 {
+                                            "YTPlainBox"
+                                        } else {
+                                            "YTPlain"
+                                        }
+                                    }
                                 }
                             } else {
-                                "YTGlow"
+                                "YTPlain"
                             };
 
                             // process each span with its own font size and text offset

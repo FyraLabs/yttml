@@ -42,7 +42,7 @@ macro_rules! define_ass_test {
             );
 
             // Parse expected and actual ASS files for semantic comparison
-            let expected_content = include_str!(concat!("../tests/ass/", $test_file, ".ass"));
+            let expected_content = include_str!(concat!("../tests/ass/", $test_file, ".reverse.ass"));
 
             let expected_parsed = parse_ass(expected_content).unwrap_or_else(|e| {
                 panic!("{}: Failed to parse expected ASS file: {}", $test_file, e)
