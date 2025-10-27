@@ -43,7 +43,7 @@ pub struct Head {
 /// similar to CSS classes
 pub struct Pen {
     /// ID of pen.
-    /// 
+    ///
     /// The ID must be an incrementing integer starting from 1.
     /// If the ID is not ordered, YouTube will re-order the IDs
     /// causing body element assignments to be out of order.
@@ -73,13 +73,13 @@ pub struct Pen {
 
     /// Opacity of foreground color, has to be input separately
     /// because it's a separate attribute in the XML
-    /// 
+    ///
     /// Specifying 255 will result in attribute not being written
     /// when uploading to YouTube.
     ///
     /// If your Hex is RGBA your program should automatically separate the A value
     /// into this attribute
-    /// 
+    ///
     #[serde(rename = "@fo")]
     #[serde(default)]
     pub foreground_opacity: Option<u32>,
@@ -108,11 +108,11 @@ pub struct Pen {
     pub edge_type: Option<EdgeType>,
 
     /// Text size
-    /// 
-    /// The value is a virtual percentage of the default size; the real 
+    ///
+    /// The value is a virtual percentage of the default size; the real
     /// percentage is 100 + (sz - 100) / 4, meaning 200 will result
     /// in a 125% font size.
-    /// 
+    ///
     /// The smallest value is 0 which results in 75% font size.
     #[serde(rename = "@sz")]
     #[serde(default)]
@@ -131,21 +131,21 @@ pub struct Pen {
     #[serde(rename = "@hg")]
     #[serde(default)]
     /// Packing of text
-    /// 
+    ///
     /// Only supports value of 1, not supported on mobile players.
     pub packing: Option<u32>,
-    
+
     #[serde(rename = "@of")]
     #[serde(default)]
     /// "Offset" of text.
     /// This is actually mislabeled, since this
     /// sets the vertical offset of the text (Subscript/Superscript)
     pub text_offset: Option<TextOffset>,
-    
+
     #[serde(rename = "@te")]
     #[serde(default)]
     /// Text emphasis, see `TextEmphasis` for more information
-    /// 
+    ///
     /// This is used to allow or disallow bold text from being
     /// displayed.
     pub text_emphasis: Option<TextEmphasis>,
@@ -229,10 +229,10 @@ pub enum FontStyle {
     #[serde(default)]
     /// Default font style.
     /// Implicitly defaults to Proportional Sans (Roboto)
-    Default = 0, 
+    Default = 0,
     /// Monospace Serif.
     /// Courier New
-    MonoSerif = 1, 
+    MonoSerif = 1,
     /// Proportional Serif.
     /// Times New Roman
     ProportionalSerif = 2,
@@ -298,7 +298,7 @@ pub struct WindowPosition {
     // subtitles move towards the sides and even out of the video.
     // The player transforms the coordinates according to effectiveCoord = (specifiedCoord * 0.96) + 2,
     // meaning subtitles don't appear *quite* where you want them to
-    
+
     /// X position from anchor point
     #[serde(rename = "@ah")]
     pub horizontal_offset: Option<i32>,
@@ -332,7 +332,7 @@ pub struct WindowStyle {
     /// Yaw (skew) direction of text (horizontal tilt)
     #[serde(rename = "@sd")]
     pub skew_direction: Option<Rotation>,
-    
+
     #[serde(default, rename = "@mh")]
     pub mode_hint: ModeHint,
     #[serde(default, rename = "@wfc")]
@@ -392,7 +392,7 @@ pub struct Paragraph {
     // Always treat the inner text as string
     pub inner: Vec<BodyElement>,
     /// Timestamp on when to display the caption in milliseconds
-    /// 
+    ///
     /// A timestamp of 0 should be avoided as on Android the positioning will be ignored
     /// and even not displayed at all in some cases.
     #[serde(rename = "@t")]
@@ -508,7 +508,7 @@ pub struct Span {
     #[serde(rename = "$value")]
     pub inner: Option<Vec<BodyElement>>,
     /// Reference to a pen style ID
-    #[serde(rename = "p")]
+    #[serde(rename = "@p")]
     pub pen: Option<u32>,
     // nested inside is more spans or something
     // this is a recursive structure
@@ -564,16 +564,16 @@ mod tests {
     use serde::de::value;
 
     use super::*;
-    
+
     fn test_parse(s: &str) {
         let parse = TimedText::from_str(s).unwrap();
         println!("\n{:#?}\n", parse);
         let t = parse.body.elements.text();
         println!("{}", t);
-        
+
         let xml = quick_xml::se::to_string(&parse).unwrap();
         println!("```xml\n{}\n```", xml);
-        
+
     }
 
     // TODO: So formatted files with <s> tags inside the <p> tags are not parsed correctly

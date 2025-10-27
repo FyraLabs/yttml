@@ -27,6 +27,8 @@ enum OutputFormat {
     Vtt,
     /// SRT format
     Srt,
+    /// ASS format
+    Ass,
 }
 
 #[derive(clap::ValueEnum, Debug, Clone, Copy)]
@@ -83,6 +85,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 OutputFormat::Yaml => serde_yml::to_string(&captions)?,
                 OutputFormat::Vtt => srv3tovtt_crate::to_vtt(&captions)?.to_string(),
                 OutputFormat::Srt => srv3tovtt_crate::to_srt(&captions)?.to_string(),
+                OutputFormat::Ass => srv3tovtt_crate::to_ass(&captions)?,
             };
             match save {
                 SaveLocation::Stdout => println!("{}", w),

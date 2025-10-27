@@ -2,10 +2,14 @@
 name = "srv3tovtt-crate"
 version = "0.1.0"
 edition = "2021"
-
+authors = [
+    "Cappy Ishihara <cappy@fyralabs.com>",
+    "Eri Ishihara <eri@nijika.dev>",
+]
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 aspasia = "0.2.1"
+hex_color = "3.0.0"
 serde = "1.0.210"
 srv3-ttml = { path = "../srv3-ttml" }
