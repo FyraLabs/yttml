@@ -53,6 +53,12 @@ trait ElementExt {
     fn text_no_zwsp(&self) -> String {
         self.text().replace('\u{200B}', "")
     }
+    // Remove padding pattern: \u200b SPACE \u200b
+    fn text_clean(&self) -> String {
+        let text = self.text();
+        // Remove the specific padding pattern used by YTSubConverter
+        text.replace("\u{200B} \u{200B}", "").replace('\u{200B}', "")
+    }
 }
 
 // Helper function to split paragraph elements into groups separated by newlines
@@ -306,7 +312,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         effect,
                         "", // if we dont have pens (the color) dont write the color
                             // there is definitely a cleaner way of doing this but this works
-                        paragraph.inner.text_no_zwsp()
+                        paragraph.inner.text_clean()
                     ).unwrap();
                 } else {
                     if let Some(head) = &captions.head {
@@ -369,6 +375,8 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                             };
 
                             // process each span with its own font size and text offset
+                            // Track previous text offset state to emit transition tags
+                            let mut prev_offset: Option<&srv3_ttml::TextOffset> = None;
                             let formatted_text = paragraph.inner.iter().map(|elem| {
                                 if let BodyElement::Span(span) = elem {
                                     if let Some(span_pen_id) = span.pen {
@@ -385,22 +393,29 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                             }).unwrap_or_default();
 
                                             // get text offset tag (subscript/superscript)
-                                            let offset_tag = span_pen.text_offset.as_ref().map(|offset| {
-                                                match offset {
-                                                    srv3_ttml::TextOffset::Subscript => "{\\ytsub}",
-                                                    srv3_ttml::TextOffset::Superscript | srv3_ttml::TextOffset::SuperscriptAlt => "{\\ytsup}",
-                                                }
-                                            }).unwrap_or_default();
+                                            let offset_tag = match (&prev_offset, &span_pen.text_offset) {
+                                                // Transitioning from subscript/superscript to regular (no offset)
+                                                (Some(_), None) => "{\\ytsur}",
+                                                // Transitioning to subscript
+                                                (_, Some(srv3_ttml::TextOffset::Subscript)) => "{\\ytsub}",
+                                                // Transitioning to superscript
+                                                (_, Some(srv3_ttml::TextOffset::Superscript | srv3_ttml::TextOffset::SuperscriptAlt)) => "{\\ytsup}",
+                                                // No change or no offset
+                                                _ => "",
+                                            };
+                                            
+                                            // Update previous offset state
+                                            prev_offset = span_pen.text_offset.as_ref();
 
-                                            format!("{}{}{}", size_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp()))
+                                            format!("{}{}{}", size_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean()))
                                         } else {
-                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp())
+                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean())
                                         }
                                     } else {
-                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp())
+                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean())
                                     }
                                 } else {
-                                    elem.text_no_zwsp()
+                                    elem.text_clean()
                                 }
                             }).collect::<String>();
 
