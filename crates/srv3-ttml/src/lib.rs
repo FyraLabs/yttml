@@ -208,7 +208,7 @@ pub enum RubyStyle {
 }
 
 /// Type of edge/outline of text
-#[derive(Debug, Serialize_repr, Deserialize_repr)]
+#[derive(Debug, Copy, Clone, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
 pub enum EdgeType {
     None = 0,

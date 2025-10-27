@@ -39,6 +39,39 @@ fn hex_to_ass_color(hex: &HexColor) -> String {
     }
 }
 
+fn hex_components(hex: &HexColor) -> Option<(u8, u8, u8)> {
+    let hex_str = format!("{:?}", hex);
+    if !(hex_str.contains("r:") && hex_str.contains("g:") && hex_str.contains("b:")) {
+        return None;
+    }
+
+    let r = hex_str
+        .split("r:")
+        .nth(1)
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse::<u8>().ok())?;
+    let g = hex_str
+        .split("g:")
+        .nth(1)
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse::<u8>().ok())?;
+    let b = hex_str
+        .split("b:")
+        .nth(1)
+        .and_then(|s| s.split(',').next())
+        .and_then(|s| s.trim().parse::<u8>().ok())?;
+
+    Some((r, g, b))
+}
+
+fn clamp_u32_to_u8(value: u32) -> u8 {
+    if value > u8::MAX as u32 {
+        u8::MAX
+    } else {
+        value as u8
+    }
+}
+
 #[derive(Clone, Debug)]
 struct StyleDefaults {
     font_name: String,
@@ -181,6 +214,8 @@ struct FormattingState {
     bold: bool,
     italic: bool,
     underline: bool,
+    has_background: bool,
+    edge_type: Option<EdgeType>,
     text_offset: Option<u8>,
 }
 
@@ -198,6 +233,8 @@ impl Clone for FormattingState {
             bold: self.bold,
             italic: self.italic,
             underline: self.underline,
+            has_background: self.has_background,
+            edge_type: self.edge_type,
             text_offset: self.text_offset,
         }
     }
@@ -217,6 +254,8 @@ impl FormattingState {
             bold: defaults.bold,
             italic: defaults.italic,
             underline: defaults.underline,
+            has_background: false,
+            edge_type: None,
             text_offset: None,
         }
     }
@@ -248,21 +287,78 @@ impl FormattingState {
         }
 
         if let Some(opacity) = pen.foreground_opacity {
-            let clamped = (opacity.min(255)) as u8;
-            self.primary_alpha = 255u8.saturating_sub(clamped);
-        }
-
-        if let Some(color) = pen.edge_color.as_ref() {
-            self.outline_color = hex_to_ass_color(color);
+            if opacity == 0 {
+                self.primary_alpha = defaults.primary_alpha;
+            } else {
+                let clamped = (opacity.min(255)) as u8;
+                self.primary_alpha = 255u8.saturating_sub(clamped);
+            }
         }
 
         if let Some(opacity) = pen.background_opacity {
-            // YouTube encodes box/glow opacity in the outline channel; match YTSubConverter.
-            self.outline_alpha = 255u8.saturating_sub(opacity);
+            let clamped = clamp_u32_to_u8(opacity as u32);
+            if clamped == 0 {
+                self.outline_alpha = defaults.outline_alpha;
+                self.outline_color = defaults.outline_color.clone();
+                self.has_background = false;
+            } else {
+                self.outline_alpha = 255u8.saturating_sub(clamped);
+                self.has_background = true;
+            }
+        }
+
+        let mut edge_color_override = pen.edge_color.as_ref().map(hex_to_ass_color);
+        let mut edge_alpha_override: Option<u8> = None;
+        if edge_color_override.is_none() && pen.edge_type.or(self.edge_type).is_some() {
+            let fallback_alpha = pen.foreground_opacity.map(clamp_u32_to_u8).unwrap_or(254);
+            edge_color_override = Some("&H222222".to_string());
+            edge_alpha_override = Some(255u8.saturating_sub(fallback_alpha));
+        }
+
+        if let Some(color) = edge_color_override {
+            let effective_edge_type = pen.edge_type.or(self.edge_type);
+            match effective_edge_type {
+                Some(EdgeType::Glow) => {
+                    if self.has_background {
+                        self.back_color = color;
+                        if let Some(alpha) = edge_alpha_override {
+                            self.back_alpha = alpha;
+                        }
+                    } else {
+                        self.outline_color = color;
+                        if let Some(alpha) = edge_alpha_override {
+                            self.outline_alpha = alpha;
+                        }
+                    }
+                }
+                Some(EdgeType::SoftShadow) | Some(EdgeType::HardShadow) | Some(EdgeType::Bevel) => {
+                    self.back_color = color;
+                    if let Some(alpha) = edge_alpha_override {
+                        self.back_alpha = alpha;
+                    }
+                }
+                _ => {
+                    self.outline_color = color;
+                    if let Some(alpha) = edge_alpha_override {
+                        self.outline_alpha = alpha;
+                    }
+                }
+            }
         }
 
         if let Some(color) = pen.background_color.as_ref() {
-            self.back_color = hex_to_ass_color(color);
+            self.outline_color = hex_to_ass_color(color);
+            self.has_background = true;
+        }
+
+        if let Some(edge_type) = pen.edge_type {
+            self.edge_type = match edge_type {
+                EdgeType::None => {
+                    self.back_color = defaults.back_color.clone();
+                    None
+                }
+                other => Some(other),
+            };
         }
 
         if let Some(offset) = pen.text_offset.as_ref() {
@@ -336,6 +432,20 @@ fn choose_style_for_pen(pen: Option<&Pen>) -> &'static str {
     }
 }
 
+fn default_edge_type_for_style(style_name: &str) -> Option<EdgeType> {
+    if style_name.contains("Glow") {
+        Some(EdgeType::Glow)
+    } else if style_name.contains("SoftShadow") {
+        Some(EdgeType::SoftShadow)
+    } else if style_name.contains("HardShadow") {
+        Some(EdgeType::HardShadow)
+    } else if style_name.contains("Bevel") {
+        Some(EdgeType::Bevel)
+    } else {
+        None
+    }
+}
+
 fn format_ass_float(value: f64) -> String {
     let rounded = (value * 1000.0).round() / 1000.0;
     let mut s = format!("{:.3}", rounded);
@@ -354,6 +464,39 @@ fn floats_equal(a: f64, b: f64) -> bool {
 
 fn trim_ass_edge_whitespace(text: String) -> String {
     text.trim_matches([' ', '\u{200B}']).to_string()
+}
+
+fn sanitize_ass_text(mut text: String) -> String {
+    if text.is_empty() {
+        return text;
+    }
+
+    text = text.replace("\r\n", "\\N");
+    text = text.replace('\u{00A0}', "\\h");
+    text = text.replace("\\N", "\\{}N");
+    text = text.replace("\\n", "\\{}n");
+    text = text.replace("\\H", "\\{}H");
+    text = text.replace("\\h", "\\{}h");
+    text = text.replace("\\{}N ", "\\{}N");
+    text = text.replace(" \\{}N", "\\{}N");
+    text = text.replace("\\{}n ", "\\{}n");
+    text = text.replace(" \\{}n", "\\{}n");
+
+    fn strip_redundant_tags(text: &mut String, newline: &str) {
+        let pattern = format!("}}{}", newline);
+        while let Some(pos) = text.find(&pattern) {
+            if let Some(start) = text[..pos].rfind('{') {
+                text.replace_range(start..pos + 1, "");
+            } else {
+                break;
+            }
+        }
+    }
+
+    strip_redundant_tags(&mut text, "\\{}N");
+    strip_redundant_tags(&mut text, "\\{}n");
+
+    text
 }
 
 fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> {
@@ -384,7 +527,7 @@ fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> 
     }
 
     if from.primary_alpha != to.primary_alpha {
-        tags.push(format!("\\1a&H{:02X}&", to.primary_alpha));
+        tags.push(format!("\\1a&H{:X}&", to.primary_alpha));
     }
 
     if from.outline_color != to.outline_color {
@@ -392,7 +535,7 @@ fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> 
     }
 
     if from.outline_alpha != to.outline_alpha {
-        tags.push(format!("\\3a&H{:02X}&", to.outline_alpha));
+        tags.push(format!("\\3a&H{:X}&", to.outline_alpha));
     }
 
     if from.back_color != to.back_color {
@@ -400,7 +543,7 @@ fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> 
     }
 
     if from.back_alpha != to.back_alpha {
-        tags.push(format!("\\4a&H{:02X}&", to.back_alpha));
+        tags.push(format!("\\4a&H{:X}&", to.back_alpha));
     }
 
     if from.text_offset != to.text_offset {
@@ -418,6 +561,132 @@ fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> 
 
 fn find_pen(head: &Head, id: u32) -> Option<&Pen> {
     head.pen.iter().find(|pen| pen.id == id)
+}
+
+#[derive(Clone, Copy, Debug)]
+struct PenUsage {
+    is_dark: bool,
+    fore_alpha: u8,
+    back_alpha: u8,
+    has_shadow: bool,
+}
+
+fn collect_pen_usage(
+    elements: &[BodyElement],
+    head: &Head,
+    inherited: Option<&Pen>,
+    usage: &mut Vec<PenUsage>,
+) {
+    for element in elements {
+        match element {
+            BodyElement::Span(span) => {
+                let current_pen = span.pen.and_then(|id| find_pen(head, id)).or(inherited);
+
+                if let Some(inner) = span.inner.as_deref() {
+                    collect_pen_usage(inner, head, current_pen, usage);
+                } else if let Some(current_pen) = current_pen {
+                    let props = pen_usage_from_pen(current_pen);
+                    usage.push(props);
+                }
+            }
+            BodyElement::Text(_) => {
+                if let Some(pen) = inherited {
+                    usage.push(pen_usage_from_pen(pen));
+                } else {
+                    usage.push(default_pen_usage());
+                }
+            }
+            BodyElement::Paragraph(paragraph) => {
+                collect_pen_usage(&paragraph.inner, head, inherited, usage);
+            }
+            BodyElement::Div(children) => {
+                collect_pen_usage(children, head, inherited, usage);
+            }
+            BodyElement::Br(_) => {}
+            BodyElement::Window(_) => {}
+        }
+    }
+}
+
+fn pen_usage_from_pen(pen: &Pen) -> PenUsage {
+    let (r, g, b) = pen
+        .foreground_color
+        .as_ref()
+        .and_then(hex_components)
+        .unwrap_or((255, 255, 255));
+    let is_dark = r.max(g).max(b) < 128;
+
+    let fore_alpha = pen.foreground_opacity.map(clamp_u32_to_u8).unwrap_or(254);
+    let back_alpha = pen
+        .background_opacity
+        .map(|value| clamp_u32_to_u8(value as u32))
+        .unwrap_or(0);
+    let has_shadow = pen.edge_type.is_some();
+
+    PenUsage {
+        is_dark,
+        fore_alpha,
+        back_alpha,
+        has_shadow,
+    }
+}
+
+fn default_pen_usage() -> PenUsage {
+    PenUsage {
+        is_dark: false,
+        fore_alpha: 254,
+        back_alpha: 0,
+        has_shadow: false,
+    }
+}
+
+fn paragraph_has_visible_pen(elements: &[BodyElement], head: &Head) -> bool {
+    fn helper(elements: &[BodyElement], head: &Head, found: &mut bool) -> bool {
+        let mut visible = false;
+
+        for element in elements {
+            match element {
+                BodyElement::Span(span) => {
+                    if let Some(id) = span.pen {
+                        if let Some(pen) = find_pen(head, id) {
+                            *found = true;
+                            let opacity = pen.foreground_opacity;
+                            if opacity != Some(0) {
+                                visible = true;
+                            }
+                        }
+                    }
+
+                    if let Some(inner) = span.inner.as_deref() {
+                        if helper(inner, head, found) {
+                            visible = true;
+                        }
+                    }
+                }
+                BodyElement::Paragraph(paragraph) => {
+                    if helper(&paragraph.inner, head, found) {
+                        visible = true;
+                    }
+                }
+                BodyElement::Div(children) => {
+                    if helper(children, head, found) {
+                        visible = true;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        visible
+    }
+
+    let mut found_pen = false;
+    let visible = helper(elements, head, &mut found_pen);
+    if !found_pen {
+        true
+    } else {
+        visible
+    }
 }
 
 fn first_text_pen<'a>(elements: &'a [BodyElement], head: &'a Head) -> Option<&'a Pen> {
@@ -637,6 +906,8 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
     let mut w = String::new();
     let head = captions.head.as_ref();
     let has_pens = head.is_some_and(|h| !h.pen.is_empty());
+    let mut awaiting_android_hack = false;
+    let mut previous_line_info: Option<(Moment, Moment, String)> = None;
 
     writeln!(&mut w, "[Script Info]").unwrap();
     writeln!(&mut w, "; Script generated by YTTML").unwrap();
@@ -670,12 +941,52 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
             let mut style_name: &'static str = DEFAULT_STYLE;
             let text: String;
 
+            if let Some(head) = head {
+                if !paragraph_has_visible_pen(&paragraph.inner, head) {
+                    continue;
+                }
+
+                let mut usage = Vec::new();
+                collect_pen_usage(&paragraph.inner, head, None, &mut usage);
+                let line_has_dark_text = usage
+                    .iter()
+                    .any(|props| props.is_dark && props.fore_alpha > 0);
+                let line_is_android_fallback = usage.iter().all(|props| {
+                    !props.is_dark
+                        && props.fore_alpha == 0
+                        && props.back_alpha == 0
+                        && !props.has_shadow
+                });
+
+                let plain_text = paragraph.inner.text_clean_ass().replace("\\N", "\n");
+
+                if line_has_dark_text {
+                    awaiting_android_hack = true;
+                } else if awaiting_android_hack {
+                    awaiting_android_hack = false;
+
+                    if let Some((prev_start, prev_end, prev_text)) = previous_line_info.as_ref() {
+                        if line_is_android_fallback
+                            && prev_start == &start
+                            && prev_end == &end
+                            && prev_text == &plain_text
+                        {
+                            continue;
+                        }
+                    }
+                }
+
+                previous_line_info = Some((start, end, plain_text.clone()));
+            }
+
             if has_pens {
                 if let Some(head) = head {
                     let base_pen = first_text_pen(&paragraph.inner, head);
                     style_name = choose_style_for_pen(base_pen);
                     let defaults = style_defaults(style_name);
-                    let default_state = FormattingState::from_defaults(&defaults);
+                    let mut default_state = FormattingState::from_defaults(&defaults);
+                    default_state.has_background = style_name.ends_with("Box");
+                    default_state.edge_type = default_edge_type_for_style(style_name);
                     let mut line_state = default_state.clone();
                     if let Some(pen) = base_pen {
                         line_state.apply_pen(pen, &defaults);
@@ -696,6 +1007,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                     let mut current_state = line_state.clone();
                     let body_text =
                         render_body_elements(&paragraph.inner, head, &defaults, &mut current_state);
+                    let body_text = sanitize_ass_text(body_text);
                     let body_text = trim_ass_edge_whitespace(body_text);
                     text = format!("{}{}", prefix, body_text);
                 } else {
@@ -708,7 +1020,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                     } else {
                         String::new()
                     };
-                    let body_text = paragraph.inner.text_clean_ass();
+                    let body_text = sanitize_ass_text(paragraph.inner.text_clean_ass());
                     let body_text = trim_ass_edge_whitespace(body_text);
                     text = format!("{}{}", prefix, body_text);
                 }
@@ -722,7 +1034,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                 } else {
                     String::new()
                 };
-                let body_text = paragraph.inner.text_clean_ass();
+                let body_text = sanitize_ass_text(paragraph.inner.text_clean_ass());
                 let body_text = trim_ass_edge_whitespace(body_text);
                 text = format!("{}{}", prefix, body_text);
             }
@@ -733,6 +1045,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                 LAYER, start_ts, end_ts, style_name, MARGIN_L, MARGIN_R, MARGIN_V, text
             )
             .unwrap();
+            println!("{} {} {}", start_ts, style_name, text);
         }
     }
 

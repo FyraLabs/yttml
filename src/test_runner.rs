@@ -116,7 +116,7 @@ fn run_single_test(test_name: &str, output_dir: &Path) -> Result<Vec<String>, St
         .map_err(|e| format!("Failed to write actual output: {}", e))?;
 
     // Read expected ASS file
-    let expected_path = format!("tests/ass/{}.ass", test_name);
+    let expected_path = format!("tests/ass/{}.reverse.ass", test_name);
     let expected_content = fs::read_to_string(&expected_path)
         .map_err(|e| format!("Failed to read {}: {}", expected_path, e))?;
 

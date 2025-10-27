@@ -1,3 +1,6 @@
 [submodule "reference/YTSubConverter"]
 	path = reference/YTSubConverter
 	url = https://github.com/arcusmaximus/YTSubConverter
+[submodule "reference/subrandr"]
+	path = reference/subrandr
+	url = https://github.com/afishhh/subrandr
