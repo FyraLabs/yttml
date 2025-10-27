@@ -59,6 +59,11 @@ trait ElementExt {
         // Remove the specific padding pattern used by YTSubConverter
         text.replace("\u{200B} \u{200B}", "").replace('\u{200B}', "")
     }
+    // Clean text and escape newlines for ASS format
+    fn text_clean_ass(&self) -> String {
+        // Replace literal newlines with ASS escape sequence \N
+        self.text_clean().replace('\n', "\\N")
+    }
 }
 
 // Helper function to split paragraph elements into groups separated by newlines
@@ -312,7 +317,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         effect,
                         "", // if we dont have pens (the color) dont write the color
                             // there is definitely a cleaner way of doing this but this works
-                        paragraph.inner.text_clean()
+                        paragraph.inner.text_clean_ass()
                     ).unwrap();
                 } else {
                     if let Some(head) = &captions.head {
@@ -406,8 +411,12 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                             };
 
                             // process each span with its own font size and text offset
-                            // Track previous text offset state to emit transition tags
+                            // Track previous formatting state to emit transition tags
                             let mut prev_offset: Option<&srv3_ttml::TextOffset> = None;
+                            let mut prev_bold: Option<bool> = None;
+                            let mut prev_italic: Option<bool> = None;
+                            let mut prev_underline: Option<bool> = None;
+                            
                             let formatted_text = paragraph.inner.iter().map(|elem| {
                                 if let BodyElement::Span(span) = elem {
                                     if let Some(span_pen_id) = span.pen {
@@ -422,6 +431,39 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                                     Some(format!("{{\\fs{}}}", relative_size))
                                                 }
                                             }).unwrap_or_default();
+
+                                            // get bold tag - only emit when state changes
+                                            let current_bold = span_pen.bold.unwrap_or(false);
+                                            let bold_tag = match prev_bold {
+                                                Some(prev) if prev != current_bold => {
+                                                    if current_bold { "{\\b1}" } else { "{\\b0}" }
+                                                }
+                                                None if current_bold => "{\\b1}",
+                                                _ => "",
+                                            };
+                                            prev_bold = Some(current_bold);
+
+                                            // get italic tag - only emit when state changes
+                                            let current_italic = span_pen.italic.unwrap_or(false);
+                                            let italic_tag = match prev_italic {
+                                                Some(prev) if prev != current_italic => {
+                                                    if current_italic { "{\\i1}" } else { "{\\i0}" }
+                                                }
+                                                None if current_italic => "{\\i1}",
+                                                _ => "",
+                                            };
+                                            prev_italic = Some(current_italic);
+
+                                            // get underline tag - only emit when state changes
+                                            let current_underline = span_pen.underline.unwrap_or(false);
+                                            let underline_tag = match prev_underline {
+                                                Some(prev) if prev != current_underline => {
+                                                    if current_underline { "{\\u1}" } else { "{\\u0}" }
+                                                }
+                                                None if current_underline => "{\\u1}",
+                                                _ => "",
+                                            };
+                                            prev_underline = Some(current_underline);
 
                                             // get text offset tag (subscript/superscript)
                                             let offset_tag = match (&prev_offset, &span_pen.text_offset) {
@@ -438,15 +480,15 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                             // Update previous offset state
                                             prev_offset = span_pen.text_offset.as_ref();
 
-                                            format!("{}{}{}", size_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean()))
+                                            format!("{}{}{}{}{}{}", size_tag, bold_tag, italic_tag, underline_tag, offset_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass()))
                                         } else {
-                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean())
+                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass())
                                         }
                                     } else {
-                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean())
+                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_clean_ass())
                                     }
                                 } else {
-                                    elem.text_clean()
+                                    elem.text_clean_ass()
                                 }
                             }).collect::<String>();
 
