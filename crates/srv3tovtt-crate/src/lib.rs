@@ -50,6 +50,9 @@ fn hex_to_ass_color(hex: &HexColor) -> String {
 
 trait ElementExt {
     fn text(&self) -> String;
+    fn text_no_zwsp(&self) -> String {
+        self.text().replace('\u{200B}', "")
+    }
 }
 
 impl ElementExt for String {
@@ -262,7 +265,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         effect,
                         "", // if we dont have pens (the color) dont write the color
                             // there is definitely a cleaner way of doing this but this works
-                        paragraph.inner.text()
+                        paragraph.inner.text_no_zwsp()
                     ).unwrap();
                 } else {
                     if let Some(head) = &captions.head {
@@ -329,26 +332,26 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                                 if let BodyElement::Span(span) = elem {
                                     if let Some(span_pen_id) = span.pen {
                                         if let Some(span_pen) = head.pen.iter().find(|p| p.id == span_pen_id) {
-                                            // get font size for the correct span
-                                            let size_tag = span_pen.font_size.map(|size| {
-                                                let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
-                                                let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
-                                                format!("{{\\fs{}}}", relative_size)
-
-                                                // not sure if it was a good idea to hardcode 38 here,
-                                                // but seeing that all of the styles have
-                                                // 38 anyway, it should be ok
+                                            // get font size for the correct span, only if different from default
+                                            let size_tag = span_pen.font_size.and_then(|size| {
+                                                if size == 100 {
+                                                    None  // Don't add tag for default size
+                                                } else {
+                                                    let real_percentage = 100.0 + (size as f64 - 100.0) / 4.0;
+                                                    let relative_size = (38.0 * real_percentage / 100.0).round() as i32;
+                                                    Some(format!("{{\\fs{}}}", relative_size))
+                                                }
                                             }).unwrap_or_default();
 
-                                            format!("{}{}", size_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text()))
+                                            format!("{}{}", size_tag, span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp()))
                                         } else {
-                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text())
+                                            span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp())
                                         }
                                     } else {
-                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text())
+                                        span.inner.as_ref().map_or(String::new(), |inner| inner.text_no_zwsp())
                                     }
                                 } else {
-                                    elem.text()
+                                    elem.text_no_zwsp()
                                 }
                             }).collect::<String>();
 
