@@ -1,6 +1,6 @@
-#[allow(unused_imports)]
 use crate::ass_test_helpers::{compare_ass_files, parse_ass};
 use srv3_ttml::TimedText;
+#[allow(unused_imports)]
 use std::str::FromStr;
 
 fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
@@ -8,6 +8,7 @@ fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
 }
 
 // Helper macro to generate test functions for all test categories
+// This performs YTT→ASS conversion and compares the result with the expected ASS file
 macro_rules! define_ass_test {
     ($test_name:ident, $test_file:expr) => {
         #[test]
@@ -18,35 +19,63 @@ macro_rules! define_ass_test {
                 Err(e) => panic!("Failed to parse {}.ytt: {}", $test_file, e),
             };
 
-            let output = match to_ass(&timed_text) {
+            let actual_ass = match to_ass(&timed_text) {
                 Ok(ass) => ass,
                 Err(e) => panic!("Failed to convert {}.ytt to ASS: {}", $test_file, e),
             };
 
             // Basic validation
             assert!(
-                !output.is_empty(),
+                !actual_ass.is_empty(),
                 "{}: conversion produced empty output",
                 $test_file
             );
             assert!(
-                output.contains("[Events]"),
+                actual_ass.contains("[Events]"),
                 "{}: Missing Events section",
                 $test_file
             );
             assert!(
-                output.contains("Dialogue:"),
+                actual_ass.contains("Dialogue:"),
                 "{}: Missing Dialogue lines",
                 $test_file
             );
 
-            // Optional: Parse and do semantic comparison if reference file exists
+            // Parse expected and actual ASS files for semantic comparison
             let expected_content = include_str!(concat!("../tests/ass/", $test_file, ".ass"));
-            if let Ok(expected_parsed) = parse_ass(expected_content) {
-                if let Ok(actual_parsed) = parse_ass(&output) {
-                    // Suppress errors for now - we're mostly checking that conversion doesn't crash
-                    let _ = compare_ass_files(&expected_parsed, &actual_parsed);
+
+            let expected_parsed = parse_ass(expected_content).unwrap_or_else(|e| {
+                panic!("{}: Failed to parse expected ASS file: {}", $test_file, e)
+            });
+
+            let actual_parsed = parse_ass(&actual_ass).unwrap_or_else(|e| {
+                panic!("{}: Failed to parse actual ASS output: {}", $test_file, e)
+            });
+
+            // Compare and report differences
+            if let Err(diffs) = compare_ass_files(&expected_parsed, &actual_parsed) {
+                eprintln!("\n{} CONVERSION DIFFERENCES:", $test_file);
+                for diff in &diffs {
+                    eprintln!("  - {}", diff);
                 }
+                eprintln!(
+                    "\nExpected {} dialogue lines, got {}",
+                    expected_parsed.events.len(),
+                    actual_parsed.events.len()
+                );
+                eprintln!(
+                    "Expected {} styles, got {}",
+                    expected_parsed.styles.len(),
+                    actual_parsed.styles.len()
+                );
+
+                // Fail the test with detailed error message
+                panic!(
+                    "\n{} conversion produced {} differences:\n{}",
+                    $test_file,
+                    diffs.len(),
+                    diffs.join("\n")
+                );
             }
         }
     };

@@ -5,6 +5,8 @@ use std::path::Path;
 #[cfg(test)]
 mod ass_test_helpers;
 #[cfg(test)]
+mod test_runner;
+#[cfg(test)]
 mod tests;
 
 #[derive(Parser)]
