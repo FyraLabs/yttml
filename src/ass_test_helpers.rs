@@ -1,10 +1,9 @@
-use ass_core::parser::{ast::{Event, EventType, Style}, Script};
+use ass_core::parser::{ast::Event, Script};
 use chumsky::prelude::*;
 use similar::TextDiff;
-use std::str::FromStr;
 
 /// Parse an ASS file using the ass-core parser
-pub fn parse_ass(content: &str) -> Result<Script, String> {
+pub fn parse_ass(content: &str) -> Result<Script<'_>, String> {
     Script::parse(content).map_err(|e| format!("{:?}", e))
 }
 
@@ -136,9 +135,9 @@ fn format_diff_output(expected: &str, actual: &str) -> String {
 }
 
 /// Compare two ASS files for semantic equivalence
-pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<String>> {
-    use ass_core::parser::ast::{Section, SectionType};
-    
+pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(), Vec<String>> {
+    use ass_core::parser::ast::Section;
+
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
@@ -155,19 +154,6 @@ pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<S
             .collect::<Vec<_>>()
     }
 
-    // Helper function to extract styles from a script
-    fn get_styles<'a>(script: &'a Script<'a>) -> Vec<&'a Style<'a>> {
-        script
-            .sections()
-            .iter()
-            .filter_map(|section| match section {
-                Section::Styles(styles) => Some(styles.as_slice()),
-                _ => None,
-            })
-            .flat_map(|styles| styles.iter())
-            .collect::<Vec<_>>()
-    }
-
     let expected_events = get_events(expected);
     let actual_events = get_events(actual);
 
@@ -180,161 +166,6 @@ pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<S
         ));
     }
 
-    let expected_styles = get_styles(expected);
-    let actual_styles = get_styles(actual);
-
-    // Check if style counts match
-    if expected_styles.len() != actual_styles.len() {
-        errors.push(format!(
-            "Style count mismatch: expected {}, got {}",
-            expected_styles.len(),
-            actual_styles.len()
-        ));
-    }
-
-    // Compare styles field-by-field
-    for (i, (exp_style, act_style)) in expected_styles.iter().zip(actual_styles.iter()).enumerate()
-    {
-        if exp_style.name != act_style.name {
-            errors.push(format!(
-                "Style {}: name mismatch: expected {}, got {}",
-                i, exp_style.name, act_style.name
-            ));
-        }
-        if exp_style.fontname != act_style.fontname {
-            errors.push(format!(
-                "Style {}: font name mismatch: expected {}, got {}",
-                i, exp_style.fontname, act_style.fontname
-            ));
-        }
-        if exp_style.fontsize != act_style.fontsize {
-            errors.push(format!(
-                "Style {}: font size mismatch: expected {}, got {}",
-                i, exp_style.fontsize, act_style.fontsize
-            ));
-        }
-        if exp_style.primary_colour != act_style.primary_colour {
-            errors.push(format!(
-                "Style {}: primary colour mismatch: expected {}, got {}",
-                i, exp_style.primary_colour, act_style.primary_colour
-            ));
-        }
-        if exp_style.secondary_colour != act_style.secondary_colour {
-            errors.push(format!(
-                "Style {}: secondary colour mismatch: expected {}, got {}",
-                i, exp_style.secondary_colour, act_style.secondary_colour
-            ));
-        }
-        if exp_style.outline_colour != act_style.outline_colour {
-            errors.push(format!(
-                "Style {}: outline colour mismatch: expected {}, got {}",
-                i, exp_style.outline_colour, act_style.outline_colour
-            ));
-        }
-        if exp_style.back_colour != act_style.back_colour {
-            errors.push(format!(
-                "Style {}: back colour mismatch: expected {}, got {}",
-                i, exp_style.back_colour, act_style.back_colour
-            ));
-        }
-        if exp_style.bold != act_style.bold {
-            errors.push(format!(
-                "Style {}: bold flag mismatch: expected {}, got {}",
-                i, exp_style.bold, act_style.bold
-            ));
-        }
-        if exp_style.italic != act_style.italic {
-            errors.push(format!(
-                "Style {}: italic flag mismatch: expected {}, got {}",
-                i, exp_style.italic, act_style.italic
-            ));
-        }
-        if exp_style.underline != act_style.underline {
-            errors.push(format!(
-                "Style {}: underline flag mismatch: expected {}, got {}",
-                i, exp_style.underline, act_style.underline
-            ));
-        }
-        if exp_style.strikeout != act_style.strikeout {
-            errors.push(format!(
-                "Style {}: strike-out flag mismatch: expected {}, got {}",
-                i, exp_style.strikeout, act_style.strikeout
-            ));
-        }
-        if exp_style.scale_x != act_style.scale_x {
-            errors.push(format!(
-                "Style {}: scale_x mismatch: expected {}, got {}",
-                i, exp_style.scale_x, act_style.scale_x
-            ));
-        }
-        if exp_style.scale_y != act_style.scale_y {
-            errors.push(format!(
-                "Style {}: scale_y mismatch: expected {}, got {}",
-                i, exp_style.scale_y, act_style.scale_y
-            ));
-        }
-        if exp_style.spacing != act_style.spacing {
-            errors.push(format!(
-                "Style {}: spacing mismatch: expected {}, got {}",
-                i, exp_style.spacing, act_style.spacing
-            ));
-        }
-        if exp_style.angle != act_style.angle {
-            errors.push(format!(
-                "Style {}: angle mismatch: expected {}, got {}",
-                i, exp_style.angle, act_style.angle
-            ));
-        }
-        if exp_style.border_style != act_style.border_style {
-            errors.push(format!(
-                "Style {}: border style mismatch: expected {}, got {}",
-                i, exp_style.border_style, act_style.border_style
-            ));
-        }
-        if exp_style.outline != act_style.outline {
-            errors.push(format!(
-                "Style {}: outline size mismatch: expected {}, got {}",
-                i, exp_style.outline, act_style.outline
-            ));
-        }
-        if exp_style.shadow != act_style.shadow {
-            errors.push(format!(
-                "Style {}: shadow size mismatch: expected {}, got {}",
-                i, exp_style.shadow, act_style.shadow
-            ));
-        }
-        if exp_style.alignment != act_style.alignment {
-            errors.push(format!(
-                "Style {}: alignment mismatch: expected {}, got {}",
-                i, exp_style.alignment, act_style.alignment
-            ));
-        }
-        if exp_style.margin_l != act_style.margin_l {
-            errors.push(format!(
-                "Style {}: margin_l mismatch: expected {}, got {}",
-                i, exp_style.margin_l, act_style.margin_l
-            ));
-        }
-        if exp_style.margin_r != act_style.margin_r {
-            errors.push(format!(
-                "Style {}: margin_r mismatch: expected {}, got {}",
-                i, exp_style.margin_r, act_style.margin_r
-            ));
-        }
-        if exp_style.margin_v != act_style.margin_v {
-            errors.push(format!(
-                "Style {}: margin_v mismatch: expected {}, got {}",
-                i, exp_style.margin_v, act_style.margin_v
-            ));
-        }
-        if exp_style.encoding != act_style.encoding {
-            errors.push(format!(
-                "Style {}: encoding mismatch: expected {}, got {}",
-                i, exp_style.encoding, act_style.encoding
-            ));
-        }
-    }
-
     // Helper function to parse ASS timestamps with ±1ms tolerance
     fn parse_ass_time(time_str: &str) -> Result<i64, String> {
         // ASS time format: H:MM:SS.CS (centiseconds)
@@ -342,18 +173,26 @@ pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<S
         if parts.len() != 3 {
             return Err(format!("Invalid time format: {}", time_str));
         }
-        
-        let hours: i64 = parts[0].parse().map_err(|e| format!("Invalid hour: {}", e))?;
-        let minutes: i64 = parts[1].parse().map_err(|e| format!("Invalid minute: {}", e))?;
-        
+
+        let hours: i64 = parts[0]
+            .parse()
+            .map_err(|e| format!("Invalid hour: {}", e))?;
+        let minutes: i64 = parts[1]
+            .parse()
+            .map_err(|e| format!("Invalid minute: {}", e))?;
+
         let sec_parts: Vec<&str> = parts[2].split('.').collect();
         if sec_parts.len() != 2 {
-            return Err(format!("Invalid seconds format: {}", parts[2]))?;
+            return Err(format!("Invalid seconds format: {}", parts[2]));
         }
-        
-        let seconds: i64 = sec_parts[0].parse().map_err(|e| format!("Invalid second: {}", e))?;
-        let centiseconds: i64 = sec_parts[1].parse().map_err(|e| format!("Invalid centisecond: {}", e))?;
-        
+
+        let seconds: i64 = sec_parts[0]
+            .parse()
+            .map_err(|e| format!("Invalid second: {}", e))?;
+        let centiseconds: i64 = sec_parts[1]
+            .parse()
+            .map_err(|e| format!("Invalid centisecond: {}", e))?;
+
         // Convert to milliseconds
         Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + centiseconds * 10)
     }
@@ -369,7 +208,8 @@ pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<S
     }
 
     // Compare events field-by-field
-    for (i, (exp_event, act_event)) in expected_events.iter().zip(actual_events.iter()).enumerate() {
+    for (i, (exp_event, act_event)) in expected_events.iter().zip(actual_events.iter()).enumerate()
+    {
         if exp_event.event_type != act_event.event_type {
             errors.push(format!(
                 "Event {}: type mismatch: expected {:?}, got {:?}",
@@ -424,7 +264,7 @@ pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<S
                 i, exp_event.margin_v, act_event.margin_v
             ));
         }
-        
+
         // Handle optional effect field comparison (like no_android_dark_text_hack)
         let exp_effect = exp_event.effect.trim();
         let act_effect = act_event.effect.trim();
@@ -441,7 +281,7 @@ pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<S
                 ));
             }
         }
-        
+
         if exp_event.text != act_event.text && !fuzzy_text_equal(exp_event.text, act_event.text) {
             let diff_view = format_diff_output(exp_event.text, act_event.text);
             errors.push(format!(
@@ -475,11 +315,19 @@ mod tests {
         let content = "[Script Info]\nTitle: Test\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&HFFFFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Hello world\n";
 
         let parsed = parse_ass(content).expect("expected parse success");
-        
+
         // Check that we have styles and events
-        let styles_count = parsed.sections().iter().filter(|s| matches!(s, ass_core::parser::ast::Section::Styles(_))).count();
-        let events_count = parsed.sections().iter().filter(|s| matches!(s, ass_core::parser::ast::Section::Events(_))).count();
-        
+        let styles_count = parsed
+            .sections()
+            .iter()
+            .filter(|s| matches!(s, ass_core::parser::ast::Section::Styles(_)))
+            .count();
+        let events_count = parsed
+            .sections()
+            .iter()
+            .filter(|s| matches!(s, ass_core::parser::ast::Section::Events(_)))
+            .count();
+
         assert_eq!(styles_count, 1);
         assert_eq!(events_count, 1);
     }

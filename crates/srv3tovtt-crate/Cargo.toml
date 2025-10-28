@@ -16,3 +16,4 @@ srv3-ttml = { path = "../srv3-ttml" }
 ryu = { workspace = true }
 ass-core = { workspace = true }
 ass-editor = { workspace = true }
+tracing = { workspace = true }

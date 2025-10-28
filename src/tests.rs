@@ -1,5 +1,4 @@
 use crate::ass_test_helpers::{compare_ass_files, parse_ass};
-use aspasia::Subtitle;
 use srv3_ttml::TimedText;
 #[allow(unused_imports)]
 use std::str::FromStr;

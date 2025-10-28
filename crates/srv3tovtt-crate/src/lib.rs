@@ -1,10 +1,12 @@
 pub use aspasia::timing::Moment;
 use aspasia::{SubRipSubtitle, WebVttSubtitle};
+use ass_editor::Style;
 use hex_color::*;
 use srv3_ttml::{
     AnchorPoint, BodyElement, EdgeType, FontStyle, Head, Paragraph as TimedTextParagraph, Pen,
     TextOffset,
 };
+use tracing::debug;
 use std::fmt::Write;
 use std::str::FromStr;
 
@@ -271,6 +273,101 @@ impl ElementExt for String {
     }
 }
 
+const STYLE_FORMAT_FIELDS: &[&str] = &[
+    "Name",
+    "Fontname",
+    "Fontsize",
+    "PrimaryColour",
+    "SecondaryColour",
+    "OutlineColour",
+    "BackColour",
+    "Bold",
+    "Italic",
+    "Underline",
+    "StrikeOut",
+    "ScaleX",
+    "ScaleY",
+    "Spacing",
+    "Angle",
+    "BorderStyle",
+    "Outline",
+    "Shadow",
+    "Alignment",
+    "MarginL",
+    "MarginR",
+    "MarginV",
+    "Encoding",
+];
+
+fn create_youtube_style(
+    name: &'static str,
+    outline_colour: &'static str,
+    back_colour: &'static str,
+    border_style: &'static str,
+    outline_width: &'static str,
+    shadow: &'static str,
+) -> Style<'static> {
+    Style {
+        name,
+        parent: None,
+        fontname: "Roboto",
+        fontsize: "38",
+        primary_colour: "&H01FEFEFE",
+        secondary_colour: "&HFF000000",
+        outline_colour,
+        back_colour,
+        bold: "0",
+        italic: "0",
+        underline: "0",
+        strikeout: "0",
+        scale_x: "100",
+        scale_y: "100",
+        spacing: "0",
+        angle: "0",
+        border_style,
+        outline: outline_width,
+        shadow,
+        alignment: "2",
+        margin_l: "25",
+        margin_r: "25",
+        margin_v: "15",
+        margin_t: None,
+        margin_b: None,
+        encoding: "1",
+        relative_to: None,
+        ..Style::default()
+    }
+}
+
+fn youtube_styles() -> Vec<Style<'static>> {
+    vec![
+        create_youtube_style("YTPlain", "&H00000000", "&H00000000", "1", "0", "0"),
+        create_youtube_style("YTPlainBox", "&H01000000", "&H00000000", "3", "0.01", "0"),
+        create_youtube_style("YTGlow", "&H01000000", "&H01000000", "1", "2", "0"),
+        create_youtube_style("YTGlowBox", "&H01000000", "&H01000000", "3", "0.01", "4"),
+        create_youtube_style("YTSoftShadow", "&H01000000", "&H01000000", "1", "0", "4"),
+        create_youtube_style(
+            "YTSoftShadowBox",
+            "&H01000000",
+            "&H01000000",
+            "3",
+            "0.01",
+            "4",
+        ),
+        create_youtube_style("YTHardShadow", "&H01000000", "&H01000000", "1", "0", "4"),
+        create_youtube_style(
+            "YTHardShadowBox",
+            "&H01000000",
+            "&H01000000",
+            "3",
+            "0.01",
+            "4",
+        ),
+        create_youtube_style("YTBevel", "&H01000000", "&H01000000", "1", "0", "4"),
+        create_youtube_style("YTBevelBox", "&H01000000", "&H00000000", "3", "0.01", "4"),
+    ]
+}
+
 impl ElementExt for BodyElement {
     fn text(&self) -> String {
         match self {
@@ -535,6 +632,7 @@ fn font_name_for_style(style: &FontStyle) -> &'static str {
     }
 }
 
+#[tracing::instrument]
 fn choose_style_for_pen(pen: Option<&Pen>) -> &'static str {
     let default_style = "YTGlow";
 
@@ -597,6 +695,7 @@ fn default_edge_type_for_style(style_name: &str) -> Option<EdgeType> {
     }
 }
 
+#[tracing::instrument]
 fn format_ass_float(value: f64) -> String {
     let rounded = (value * 10000.0).round() / 10000.0;
 
@@ -622,14 +721,18 @@ fn format_ass_float(value: f64) -> String {
     s
 }
 
+#[tracing::instrument]
 fn floats_equal(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.00005
 }
 
+
+#[tracing::instrument]
 fn trim_ass_edge_whitespace(text: String) -> String {
     text.trim_matches([' ', '\u{200B}']).to_string()
 }
 
+#[tracing::instrument]
 fn sanitize_ass_text(mut text: String) -> String {
     if text.is_empty() {
         return text;
@@ -690,6 +793,8 @@ fn ass_placeholders_to_plain_text(text: &str) -> String {
         .replace(MARKER_LIT_RBRACE, "}")
 }
 
+
+#[tracing::instrument]
 fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> {
     let mut tags = Vec::new();
 
@@ -838,6 +943,7 @@ fn default_pen_usage() -> PenUsage {
     }
 }
 
+#[tracing::instrument]
 fn first_text_pen<'a>(elements: &'a [BodyElement], head: &'a Head) -> Option<&'a Pen> {
     for element in elements {
         match element {
@@ -873,6 +979,7 @@ fn first_text_pen<'a>(elements: &'a [BodyElement], head: &'a Head) -> Option<&'a
     None
 }
 
+#[tracing::instrument]
 fn render_body_elements(
     elements: &[BodyElement],
     head: &Head,
@@ -961,6 +1068,7 @@ fn format_coord(value: f32) -> String {
     }
 }
 
+#[tracing::instrument]
 fn position_override(paragraph: &TimedTextParagraph, head: Option<&Head>) -> Option<String> {
     let wp_id = paragraph.window_position?;
     let head = head?;
@@ -1051,9 +1159,10 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle
     Ok(aspasia::WebVttSubtitle::from_str(&w).unwrap())
 }
 
+#[tracing::instrument]
 pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
-    use ass_editor::{EditorDocument, core::builders::EventBuilder};
-    
+    use ass_editor::{core::builders::EventBuilder, EditorDocument};
+
     const DEFAULT_STYLE: &str = "YTGlow";
     const PLAY_RES_X: i32 = 1280;
     const PLAY_RES_Y: i32 = 720;
@@ -1071,48 +1180,44 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
          ScriptType: v4.00+\n\
          WrapStyle: 0\n\
          ScaledBorderAndShadow: yes\n\
-         PlayResX: {}\n\
-         PlayResY: {}\n\
+         PlayResX: {PLAY_RES_X}\n\
+         PlayResY: {PLAY_RES_Y}\n\
          \n\
          [V4+ Styles]\n\
          Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\n\
          \n\
          [Events]\n\
          Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text\n",
-        PLAY_RES_X, PLAY_RES_Y
     );
-    
-    let mut doc = EditorDocument::from_content(&initial_content)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to create document: {:?}", e)))?;
+
+    let mut doc = EditorDocument::from_content(&initial_content).map_err(|e| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("Failed to create document: {:?}", e),
+        )
+    })?;
 
     // Add YouTube standard styles using EditorDocument API
-    let styles_data = [
-        ("YTPlain", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H00000000", "&H00000000", 1, "0", "0", 2),
-        ("YTPlainBox", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H00000000", 3, "0.01", "0", 2),
-        ("YTGlow", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 1, "2", "0", 2),
-        ("YTGlowBox", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 3, "0.01", "4", 2),
-        ("YTSoftShadow", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 1, "0", "4", 2),
-        ("YTSoftShadowBox", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 3, "0.01", "4", 2),
-        ("YTHardShadow", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 1, "0", "4", 2),
-        ("YTHardShadowBox", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 3, "0.01", "4", 2),
-        ("YTBevel", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H01000000", 1, "0", "4", 2),
-        ("YTBevelBox", "Roboto", 38, "&H01FEFEFE", "&HFF000000", "&H01000000", "&H00000000", 3, "0.01", "4", 2),
-    ];
+    for style in youtube_styles() {
+        let style_line = style.to_ass_string_with_format(STYLE_FORMAT_FIELDS);
 
-    // Add each style to the document
-    for (name, font, size, primary, secondary, outline, back, border_style, outline_width, shadow, alignment) in &styles_data {
-        let style_line = format!(
-            "Style: {},{},{},{},{},{},{},0,0,0,0,100,100,0,0,{},{},{},{},25,25,15,1",
-            name, font, size, primary, secondary, outline, back, border_style, outline_width, shadow, alignment
-        );
-        
         // Insert the style line into the document
-        let current_text = doc.text();
-        let styles_end = current_text.find("[Events]").unwrap_or(current_text.len());
-        let insert_pos = current_text[..styles_end].rfind('\n').map(|p| p + 1).unwrap_or(styles_end);
-        
-        doc.insert(ass_editor::Position::new(insert_pos), &format!("{}\n", style_line))
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to insert style: {:?}", e)))?;
+        // let current_text = doc.text();
+        // let styles_end = current_text.find("[Events]").unwrap_or(current_text.len());
+        // let insert_pos = current_text[..styles_end]
+        //     .rfind('\n')
+        //     .map(|p| p + 1)
+        //     .unwrap_or(styles_end);
+
+        // note: style ordering doesn't matter
+
+        debug!(?style_line, "Inserting YouTube style");
+        doc.add_style_line(&style_line.to_string()).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Failed to insert style: {:?}", e),
+            )
+        })?;
     }
 
     // Build event lines
@@ -1131,7 +1236,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
             if let Some(head) = head {
                 let mut usage = Vec::new();
                 collect_pen_usage(&paragraph.inner, head, None, &mut usage);
-                
+
                 let line_has_dark_text = usage
                     .iter()
                     .any(|props| props.is_dark && props.fore_alpha > 0);
@@ -1248,19 +1353,35 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                 .effect(effect_field)
                 .text(&text)
                 .build()
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to build event: {:?}", e)))?;
+                .map_err(|e| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        format!("Failed to build event: {:?}", e),
+                    )
+                })?;
 
             // Insert the event line into the document
             let current_text = doc.text();
             let insert_pos = current_text.len();
-            doc.insert(ass_editor::Position::new(insert_pos), &format!("{}\n", event_line))
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, format!("Failed to insert event: {:?}", e)))?;
+
+            // we want to insert the lines manually because the sorting is fucked up
+            doc.insert(
+                ass_editor::Position::new(insert_pos),
+                &format!("{}\n", event_line),
+            )
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Failed to insert event: {:?}", e),
+                )
+            })?;
         }
     }
 
     Ok(doc.text())
 }
 
+// todo: use ass-core's exporters
 pub fn to_srt(
     captions: &srv3_ttml::TimedText,
 ) -> Result<SubRipSubtitle, Box<dyn std::error::Error>> {
