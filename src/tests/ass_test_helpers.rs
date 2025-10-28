@@ -1,6 +1,6 @@
+use ariadne::{sources, Color, Label, Report, ReportKind};
 use ass_core::parser::{ast::Event, Script};
 use chumsky::prelude::*;
-use similar::TextDiff;
 
 /// Parse an ASS file using the ass-core parser
 pub fn parse_ass(content: &str) -> Result<Script<'_>, String> {
@@ -194,21 +194,92 @@ fn escape_debug_str(input: &str) -> String {
     format!("{}", input.escape_debug())
 }
 
+fn diff_spans(expected: &str, actual: &str) -> ((usize, usize), (usize, usize)) {
+    if expected == actual {
+        let len = expected.len();
+        return ((len, len), (len, len));
+    }
+
+    let mut prefix_bytes = 0;
+    for (exp_char, act_char) in expected.chars().zip(actual.chars()) {
+        if exp_char == act_char {
+            prefix_bytes += exp_char.len_utf8();
+        } else {
+            break;
+        }
+    }
+
+    let expected_tail = &expected[prefix_bytes..];
+    let actual_tail = &actual[prefix_bytes..];
+
+    let mut suffix_bytes = 0;
+    let mut expected_tail_iter = expected_tail.chars().rev();
+    let mut actual_tail_iter = actual_tail.chars().rev();
+    loop {
+        match (expected_tail_iter.next(), actual_tail_iter.next()) {
+            (Some(exp_char), Some(act_char)) if exp_char == act_char => {
+                suffix_bytes += exp_char.len_utf8();
+
+                if prefix_bytes + suffix_bytes >= expected.len()
+                    || prefix_bytes + suffix_bytes >= actual.len()
+                {
+                    break;
+                }
+            }
+            _ => break,
+        }
+    }
+
+    let mut expected_end = expected.len().saturating_sub(suffix_bytes);
+    let mut actual_end = actual.len().saturating_sub(suffix_bytes);
+
+    if expected_end < prefix_bytes {
+        expected_end = prefix_bytes;
+    }
+    if actual_end < prefix_bytes {
+        actual_end = prefix_bytes;
+    }
+
+    ((prefix_bytes, expected_end), (prefix_bytes, actual_end))
+}
+
 fn format_diff_output(expected: &str, actual: &str) -> String {
-    let expected_display = format!("{}\n", escape_debug_str(expected));
-    let actual_display = format!("{}\n", escape_debug_str(actual));
+    let expected_display = escape_debug_str(expected);
+    let actual_display = escape_debug_str(actual);
 
-    let diff = TextDiff::from_lines(&expected_display, &actual_display);
+    let ((expected_start, expected_end), (actual_start, actual_end)) =
+        diff_spans(&expected_display, &actual_display);
+
+    let report = Report::build(
+        ReportKind::Error,
+        ("actual.ass", actual_start..actual_start),
+    )
+    .with_message("ASS text mismatch")
+    .with_label(
+        Label::new(("expected.ass", expected_start..expected_end))
+            .with_message("expected segment")
+            .with_color(Color::Yellow),
+    )
+    .with_label(
+        Label::new(("actual.ass", actual_start..actual_end))
+            .with_message("actual segment")
+            .with_color(Color::Cyan),
+    )
+    .finish();
+
     let mut buffer = Vec::new();
-    diff.unified_diff()
-        .context_radius(0)
-        .header("expected", "actual")
-        .to_writer(&mut buffer)
-        .expect("writing diff to buffer");
+    if let Err(err) = report.write(
+        sources([
+            ("expected.ass", expected_display.as_str()),
+            ("actual.ass", actual_display.as_str()),
+        ]),
+        &mut buffer,
+    ) {
+        return format!("  <failed to render ariadne report: {}>", err);
+    }
 
-    let diff_string =
-        String::from_utf8(buffer).unwrap_or_else(|_| "<diff output not valid UTF-8>".to_string());
-    diff_string
+    String::from_utf8(buffer)
+        .unwrap_or_else(|_| "<ariadne output not valid UTF-8>".to_string())
         .lines()
         .map(|line| format!("  {}", line))
         .collect::<Vec<_>>()
@@ -369,32 +440,21 @@ pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(
                 FuzzyMatchResult::NumericOnly => {
                     let diff_view = format_diff_output(exp_event.text, act_event.text);
                     warnings.push(format!(
-                        "Event {}: text numeric-only mismatch downgraded to warning:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
-                        i,
-                        escape_debug_str(exp_event.text),
-                        escape_debug_str(act_event.text),
-                        diff_view
+                        "Event {}: text numeric-only mismatch downgraded to warning:\n{}",
+                        i, diff_view
                     ));
                 }
                 FuzzyMatchResult::Different => {
                     if pos_difference_only(exp_event.text, act_event.text) {
                         let diff_view = format_diff_output(exp_event.text, act_event.text);
                         warnings.push(format!(
-                            "Event {}: text mismatch limited to pos() rounding, downgraded to warning:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
+                            "Event {}: text mismatch limited to pos() rounding, downgraded to warning:\n{}",
                             i,
-                            escape_debug_str(exp_event.text),
-                            escape_debug_str(act_event.text),
                             diff_view
                         ));
                     } else {
                         let diff_view = format_diff_output(exp_event.text, act_event.text);
-                        errors.push(format!(
-                            "Event {}: text mismatch:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
-                            i,
-                            escape_debug_str(exp_event.text),
-                            escape_debug_str(act_event.text),
-                            diff_view
-                        ));
+                        errors.push(format!("Event {}: text mismatch:\n{}", i, diff_view));
                     }
                 }
             }
