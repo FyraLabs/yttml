@@ -27,6 +27,7 @@ Cargo.lock
 
 
 test_output/
+test-private/
 *.srv3
 *.ass
 !tests/**
