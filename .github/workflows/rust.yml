@@ -67,18 +67,15 @@ jobs:
 
       - name: Run tests
         run: cargo test --verbose --all-features
-      
+
       - name: Read test summary
         id: test_summary
         if: always()
         run: |
           cat test_output/summary.md >> $GITHUB_STEP_SUMMARY
 
-
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v5
         with:
           path: test_output
-      
-      
