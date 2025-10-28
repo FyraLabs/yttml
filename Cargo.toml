@@ -28,6 +28,6 @@ similar = "2.5"
 members = ["crates/srv3-ttml", "crates/srv3tovtt-crate"]
 
 [workspace.dependencies]
-ass-editor = "0.1.1"
+ass-editor = { version = "0.1.1", features = ["full"] }
 ass-core = "0.1.1"
 ryu = "1.0.20"
