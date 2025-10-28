@@ -599,13 +599,26 @@ fn default_edge_type_for_style(style_name: &str) -> Option<EdgeType> {
 
 fn format_ass_float(value: f64) -> String {
     let rounded = (value * 10000.0).round() / 10000.0;
-    let mut s = format!("{:.4}", rounded);
-    while s.contains('.') && s.ends_with('0') {
-        s.pop();
+
+    if rounded == 0.0 {
+        return "0".to_string();
     }
-    if s.ends_with('.') {
-        s.pop();
+
+    let mut buffer = ryu::Buffer::new();
+    let repr = buffer.format_finite(rounded);
+    let mut s = repr.to_string();
+
+    if s.contains('.') {
+        let trimmed_len = {
+            let trimmed = s.trim_end_matches('0').trim_end_matches('.');
+            trimmed.len()
+        };
+        if trimmed_len == 0 {
+            return "0".to_string();
+        }
+        s.truncate(trimmed_len);
     }
+
     s
 }
 

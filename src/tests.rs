@@ -8,6 +8,12 @@ fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
     srv3tovtt_crate::to_ass(timed_text)
 }
 
+const STAGE_PARSE_SRV3: &str = "parse-srv3";
+const STAGE_CONVERT_TO_ASS: &str = "srv3-to-ass";
+const STAGE_PARSE_EXPECTED_ASS: &str = "parse-expected-ass";
+const STAGE_PARSE_ACTUAL_ASS: &str = "parse-actual-ass";
+const STAGE_COMPARE_ASS: &str = "compare-ass";
+
 // Helper macro to generate test functions for all test categories
 // This performs YTT→ASS conversion and compares the result with the expected ASS file
 macro_rules! define_ass_test {
@@ -17,12 +23,18 @@ macro_rules! define_ass_test {
             let input = include_str!(concat!("../tests/ass/", $test_file, ".ytt"));
             let timed_text = match TimedText::from_str(input) {
                 Ok(tt) => tt,
-                Err(e) => panic!("Failed to parse {}.ytt: {}", $test_file, e),
+                Err(e) => panic!(
+                    "[round-trip stage: {}] Failed to parse {}.ytt: {}",
+                    STAGE_PARSE_SRV3, $test_file, e
+                ),
             };
 
             let actual_ass = match to_ass(&timed_text) {
                 Ok(ass) => ass,
-                Err(e) => panic!("Failed to convert {}.ytt to ASS: {}", $test_file, e),
+                Err(e) => panic!(
+                    "[round-trip stage: {}] Failed to convert {}.ytt to ASS: {}",
+                    STAGE_CONVERT_TO_ASS, $test_file, e
+                ),
             };
 
             // Basic validation
@@ -47,16 +59,25 @@ macro_rules! define_ass_test {
                 include_str!(concat!("../tests/ass/", $test_file, ".reverse.ass"));
 
             let expected_parsed = parse_ass(expected_content).unwrap_or_else(|e| {
-                panic!("{}: Failed to parse expected ASS file: {}", $test_file, e)
+                panic!(
+                    "[round-trip stage: {}] {}: Failed to parse expected ASS file: {}",
+                    STAGE_PARSE_EXPECTED_ASS, $test_file, e
+                )
             });
 
             let actual_parsed = parse_ass(&actual_ass).unwrap_or_else(|e| {
-                panic!("{}: Failed to parse actual ASS output: {}", $test_file, e)
+                panic!(
+                    "[round-trip stage: {}] {}: Failed to parse actual ASS output: {}",
+                    STAGE_PARSE_ACTUAL_ASS, $test_file, e
+                )
             });
 
             // Compare and report differences
             if let Err(diffs) = compare_ass_files(&expected_parsed, &actual_parsed) {
-                eprintln!("\n{} CONVERSION DIFFERENCES:", $test_file);
+                eprintln!(
+                    "\n[round-trip stage: {}] {} CONVERSION DIFFERENCES:",
+                    STAGE_COMPARE_ASS, $test_file
+                );
                 for diff in &diffs {
                     eprintln!("  - {}", diff);
                 }
@@ -73,7 +94,8 @@ macro_rules! define_ass_test {
 
                 // Fail the test with detailed error message
                 panic!(
-                    "\n{} conversion produced {} differences:\n{}",
+                    "\n[round-trip stage: {}] {} conversion produced {} differences:\n{}",
+                    STAGE_COMPARE_ASS,
                     $test_file,
                     diffs.len(),
                     diffs.join("\n")

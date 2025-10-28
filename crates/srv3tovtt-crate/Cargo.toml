@@ -13,3 +13,4 @@ aspasia = "0.2.1"
 hex_color = "3.0.0"
 serde = "1.0.210"
 srv3-ttml = { path = "../srv3-ttml" }
+ryu = { workspace = true }
