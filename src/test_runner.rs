@@ -3,7 +3,6 @@ use srv3_ttml::TimedText;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
-use std::str::FromStr;
 
 fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
     srv3tovtt_crate::to_ass(timed_text)
@@ -80,7 +79,7 @@ pub fn run_all_tests_with_output() {
         }
     }
 
-    summary.push_str(&format!("\n## Summary\n"));
+    summary.push_str("\n## Summary\n");
     summary.push_str(&format!("- **Passed**: {}\n", passed));
     summary.push_str(&format!("- **Failed**: {}\n", failed));
     summary.push_str(&format!("- **Total**: {}\n", test_files.len()));
