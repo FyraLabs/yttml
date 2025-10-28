@@ -1,5 +1,7 @@
 pub use aspasia::timing::Moment;
-use aspasia::{SubRipSubtitle, WebVttSubtitle};
+use aspasia::substation::ass::{AssEvent, AssScriptInfo, AssStyle, AssSubtitle};
+use aspasia::substation::SubStationEventKind;
+use aspasia::{SubRipSubtitle, Subtitle, WebVttSubtitle};
 use hex_color::*;
 use srv3_ttml::{
     AnchorPoint, BodyElement, EdgeType, FontStyle, Head, Paragraph as TimedTextParagraph, Pen,
@@ -1051,52 +1053,299 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle
     Ok(aspasia::WebVttSubtitle::from_str(&w).unwrap())
 }
 
-pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
-    const DEFAULT_STYLE: &str = "YTGlow";
-    const MARGIN_L: i32 = 0;
-    const MARGIN_R: i32 = 0;
-    const MARGIN_V: i32 = 0;
-    const LAYER: i32 = 0;
-    const PLAY_RES_X: i32 = 1280;
-    const PLAY_RES_Y: i32 = 720;
+fn create_youtube_styles() -> Vec<AssStyle> {
+    vec![
+        AssStyle {
+            name: "YTPlain".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H00000000".to_string(),
+            back_colour: "&H00000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 1,
+            outline: 0,
+            shadow: 0,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTPlainBox".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H00000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 3,
+            outline: 0,
+            shadow: 0,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTGlow".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 1,
+            outline: 2,
+            shadow: 0,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTGlowBox".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 3,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTSoftShadow".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 1,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTSoftShadowBox".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 3,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTHardShadow".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 1,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTHardShadowBox".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 3,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTBevel".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H01000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 1,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+        AssStyle {
+            name: "YTBevelBox".to_string(),
+            fontname: "Roboto".to_string(),
+            fontsize: 38,
+            primary_colour: "&H01FEFEFE".to_string(),
+            secondary_colour: "&HFF000000".to_string(),
+            outline_colour: "&H01000000".to_string(),
+            back_colour: "&H00000000".to_string(),
+            bold: false,
+            italic: false,
+            underline: false,
+            strike_out: false,
+            scale_x: 100,
+            scale_y: 100,
+            spacing: 0,
+            angle: 0.0,
+            border_style: 3,
+            outline: 0,
+            shadow: 4,
+            alignment: 2,
+            margin_l: 25,
+            margin_r: 25,
+            margin_v: 15,
+            encoding: 1,
+        },
+    ]
+}
 
-    let mut w = String::new();
+pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
+    const MARGIN_L: i64 = 0;
+    const MARGIN_R: i64 = 0;
+    const MARGIN_V: i64 = 0;
+    const LAYER: i64 = 0;
+    const PLAY_RES_X: &str = "1280";
+    const PLAY_RES_Y: &str = "720";
+
     let head = captions.head.as_ref();
     let has_pens = head.is_some_and(|h| !h.pen.is_empty());
     let mut awaiting_android_hack = false;
     let mut previous_line_info: Option<(Moment, Moment, String)> = None;
 
-    writeln!(&mut w, "[Script Info]").unwrap();
-    writeln!(&mut w, "; Script generated by YTTML").unwrap();
-    writeln!(&mut w, "; https://github.com/FyraLabs/yttml/").unwrap();
-    writeln!(&mut w, "ScriptType: v4.00+").unwrap();
-    writeln!(&mut w, "WrapStyle: 0").unwrap();
-    writeln!(&mut w, "ScaledBorderAndShadow: yes").unwrap();
-    writeln!(&mut w, "PlayResX: {}", PLAY_RES_X).unwrap();
-    writeln!(&mut w, "PlayResY: {}", PLAY_RES_Y).unwrap();
-    w.push('\n');
+    // Create script info
+    let script_info = AssScriptInfo::builder()
+        .title("Generated by YTTML")
+        .script_type("v4.00+")
+        .wrap_style("0")
+        .play_res_x(PLAY_RES_X)
+        .play_res_y(PLAY_RES_Y)
+        .collisions("Normal")
+        .build();
 
-    writeln!(&mut w, "[V4+ Styles]").unwrap();
-    writeln!(&mut w, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").unwrap();
-    writeln!(&mut w, "Style: YTPlain,Roboto,38,&H01FEFEFE,&HFF000000,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,25,25,15,1\nStyle: YTPlainBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H00000000,0,0,0,0,100,100,0,0,3,0.01,0,2,25,25,15,1\nStyle: YTGlow,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,2,0,2,25,25,15,1\nStyle: YTGlowBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1\nStyle: YTSoftShadow,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,0,4,2,25,25,15,1\nStyle: YTSoftShadowBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1\nStyle: YTHardShadow,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,0,4,2,25,25,15,1\nStyle: YTHardShadowBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1\nStyle: YTBevel,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H01000000,0,0,0,0,100,100,0,0,1,0,4,2,25,25,15,1\nStyle: YTBevelBox,Roboto,38,&H01FEFEFE,&HFF000000,&H01000000,&H00000000,0,0,0,0,100,100,0,0,3,0.01,4,2,25,25,15,1").unwrap();
-    w.push('\n');
+    // Create styles
+    let styles = create_youtube_styles();
 
-    writeln!(&mut w, "[Events]").unwrap();
-    writeln!(
-        &mut w,
-        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text"
-    )
-    .unwrap();
+    // Create dialogue events
+    let mut dialogue_events = Vec::new();
 
     for element in &captions.body.elements {
         if let BodyElement::Paragraph(paragraph) = element {
             let start = Moment::from(paragraph.timestamp as i64);
             let end = Moment::from((paragraph.timestamp + paragraph.duration) as i64);
             let start_ts = Moment::as_substation_timestamp(&start);
-            let end_ts = Moment::as_substation_timestamp(&end);
+            let _end_ts = Moment::as_substation_timestamp(&end);
 
-            let mut style_name: &'static str = DEFAULT_STYLE;
-            let mut effect: Option<&'static str> = None;
+            let mut style_name: &'static str = "YTGlow";
+            let mut effect: Option<String> = None;
             let mut skip_line = false;
             let text: String;
 
@@ -1165,7 +1414,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                         {
                             skip_line = true;
                         } else {
-                            effect = Some(NO_ANDROID_DARK_TEXT_HACK);
+                            effect = Some(NO_ANDROID_DARK_TEXT_HACK.to_string());
                         }
                     }
                     awaiting_android_hack = false;
@@ -1238,25 +1487,107 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
                 text = format!("{}{}", prefix, body_text);
             }
 
-            let effect_field = effect.unwrap_or("");
-            writeln!(
-                &mut w,
-                "Dialogue: {},{},{},{},,{},{},{},{},{}",
-                LAYER,
-                start_ts,
-                end_ts,
-                style_name,
-                MARGIN_L,
-                MARGIN_R,
-                MARGIN_V,
-                effect_field,
-                text
-            )
-            .unwrap();
+            // Create AssEvent
+            dialogue_events.push(AssEvent {
+                kind: SubStationEventKind::Dialogue,
+                layer: LAYER,
+                start,
+                end,
+                style: Some(style_name.to_string()),
+                name: None,
+                margin_l: MARGIN_L,
+                margin_r: MARGIN_R,
+                margin_v: MARGIN_V,
+                effect,
+                text,
+            });
         }
     }
 
-    Ok(w)
+    // Build the AssSubtitle
+    let subtitle = AssSubtitle::builder()
+        .script_info(script_info)
+        .styles(styles)
+        .dialogue(dialogue_events)
+        .build();
+
+    // We can't use aspasia's Display directly due to bugs:
+    // 1. Missing "Style: " prefix
+    // 2. Boolean serialization is "true"/"false" instead of 0/1
+    // 3. Missing "ScaledBorderAndShadow" field
+    // So we'll manually format the ASS output
+    
+    let mut output = String::new();
+    
+    // Write Script Info
+    writeln!(&mut output, "[Script Info]").unwrap();
+    writeln!(&mut output, "; Script generated by YTTML").unwrap();
+    writeln!(&mut output, "; https://github.com/FyraLabs/yttml/").unwrap();
+    writeln!(&mut output, "ScriptType: v4.00+").unwrap();
+    writeln!(&mut output, "WrapStyle: 0").unwrap();
+    writeln!(&mut output, "ScaledBorderAndShadow: yes").unwrap();
+    writeln!(&mut output, "PlayResX: {}", PLAY_RES_X).unwrap();
+    writeln!(&mut output, "PlayResY: {}", PLAY_RES_Y).unwrap();
+    output.push('\n');
+    
+    // Write Styles
+    writeln!(&mut output, "[V4+ Styles]").unwrap();
+    writeln!(&mut output, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").unwrap();
+    
+    for style in subtitle.styles() {
+        writeln!(
+            &mut output,
+            "Style: {},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
+            style.name,
+            style.fontname,
+            style.fontsize,
+            style.primary_colour,
+            style.secondary_colour,
+            style.outline_colour,
+            style.back_colour,
+            if style.bold { 1 } else { 0 },
+            if style.italic { 1 } else { 0 },
+            if style.underline { 1 } else { 0 },
+            if style.strike_out { 1 } else { 0 },
+            style.scale_x,
+            style.scale_y,
+            style.spacing,
+            style.angle,
+            style.border_style,
+            style.outline,
+            style.shadow,
+            style.alignment,
+            style.margin_l,
+            style.margin_r,
+            style.margin_v,
+            style.encoding
+        ).unwrap();
+    }
+    output.push('\n');
+    
+    // Write Events
+    writeln!(&mut output, "[Events]").unwrap();
+    writeln!(&mut output, "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text").unwrap();
+    
+    for event in subtitle.events() {
+        writeln!(
+            &mut output,
+            "{}: {},{},{},{},{},{},{},{},{},{}",
+            event.kind,
+            event.layer,
+            event.start.as_substation_timestamp(),
+            event.end.as_substation_timestamp(),
+            event.style.as_deref().unwrap_or(""),
+            event.name.as_deref().unwrap_or(""),
+            event.margin_l,
+            event.margin_r,
+            event.margin_v,
+            event.effect.as_deref().unwrap_or(""),
+            event.text
+        ).unwrap();
+    }
+    
+    Ok(output)
 }
 
 pub fn to_srt(
