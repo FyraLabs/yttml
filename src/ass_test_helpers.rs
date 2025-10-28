@@ -1,5 +1,6 @@
 use aspasia::{AssSubtitle, Subtitle};
 use chumsky::prelude::*;
+use similar::TextDiff;
 use std::mem::discriminant;
 use std::str::FromStr;
 
@@ -121,6 +122,31 @@ fn fuzzy_text_equal(expected: &str, actual: &str) -> bool {
     }
 
     true
+}
+
+fn escape_debug_str(input: &str) -> String {
+    format!("{}", input.escape_debug())
+}
+
+fn format_diff_output(expected: &str, actual: &str) -> String {
+    let expected_display = format!("{}\n", escape_debug_str(expected));
+    let actual_display = format!("{}\n", escape_debug_str(actual));
+
+    let diff = TextDiff::from_lines(&expected_display, &actual_display);
+    let mut buffer = Vec::new();
+    diff.unified_diff()
+        .context_radius(0)
+        .header("expected", "actual")
+        .to_writer(&mut buffer)
+        .expect("writing diff to buffer");
+
+    let diff_string =
+        String::from_utf8(buffer).unwrap_or_else(|_| "<diff output not valid UTF-8>".to_string());
+    diff_string
+        .lines()
+        .map(|line| format!("  {}", line))
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Compare two ASS files for semantic equivalence
@@ -381,9 +407,13 @@ pub fn compare_ass_files(expected: &AssSubtitle, actual: &AssSubtitle) -> Result
             }
         }
         if exp_line.text != act_line.text && !fuzzy_text_equal(&exp_line.text, &act_line.text) {
+            let diff_view = format_diff_output(&exp_line.text, &act_line.text);
             errors.push(format!(
-                "Line {}: text mismatch: expected '{}', got '{}'",
-                i, exp_line.text, act_line.text
+                "Line {}: text mismatch:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
+                i,
+                escape_debug_str(&exp_line.text),
+                escape_debug_str(&act_line.text),
+                diff_view
             ));
         }
     }

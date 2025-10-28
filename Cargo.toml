@@ -4,20 +4,9 @@ version = "0.0.1"
 edition = "2021"
 description = "A collection of utilities for working with YouTube-flavored TTML (SRV3) captions"
 license = "MIT"
-authors = [
-    "Cappy Ishihara <cappy@fyralabs.com>"
-]
-categories = [
-    "text-processing",
-    "multimedia::video"
-]
-keywords = [
-    "youtube",
-    "ttml",
-    "srv3",
-    "captions",
-    "subtitles"
-]
+authors = ["Cappy Ishihara <cappy@fyralabs.com>"]
+categories = ["text-processing", "multimedia::video"]
+keywords = ["youtube", "ttml", "srv3", "captions", "subtitles"]
 repository = "https://github.com/FyraLabs/yttml"
 
 [dev-dependencies]
@@ -31,14 +20,12 @@ ryu = "1.0.20"
 serde = { version = "1.0.209", features = ["derive"] }
 serde_json = "1.0.127"
 serde_yml = "0.0.12"
-srv3-ttml = { path = "crates/srv3-ttml", version = "0.1.0"}
+srv3-ttml = { path = "crates/srv3-ttml", version = "0.1.0" }
 srv3tovtt-crate = { path = "crates/srv3tovtt-crate" }
+similar = "2.5"
 
 [workspace]
-members = [
-   "crates/srv3-ttml",
-   "crates/srv3tovtt-crate"
-]
+members = ["crates/srv3-ttml", "crates/srv3tovtt-crate"]
 
 [workspace.dependencies]
 ryu = "1.0.20"
