@@ -3,10 +3,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 #[cfg(test)]
-mod ass_test_helpers;
-#[cfg(test)]
-mod test_runner;
-#[cfg(test)]
 mod tests;
 
 #[derive(Parser)]
@@ -76,7 +72,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             save,
             output,
         } => {
-            println!("Parsing file: {}", input);
+            eprintln!("Parsing file: {input}");
 
             let file = std::fs::read_to_string(&input)?;
 

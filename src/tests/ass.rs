@@ -1,17 +1,14 @@
-use crate::ass_test_helpers::{compare_ass_files, parse_ass};
+use super::ass_test_helpers::{compare_ass_files, parse_ass};
 use srv3_ttml::TimedText;
-#[allow(unused_imports)]
-use std::str::FromStr;
-
-fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
-    srv3tovtt_crate::to_ass(timed_text)
-}
-
 const STAGE_PARSE_SRV3: &str = "parse-srv3";
 const STAGE_CONVERT_TO_ASS: &str = "srv3-to-ass";
 const STAGE_PARSE_EXPECTED_ASS: &str = "parse-expected-ass";
 const STAGE_PARSE_ACTUAL_ASS: &str = "parse-actual-ass";
 const STAGE_COMPARE_ASS: &str = "compare-ass";
+
+fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
+    srv3tovtt_crate::to_ass(timed_text)
+}
 
 // Helper macro to generate test functions for all test categories
 // This performs YTT→ASS conversion and compares the result with the expected ASS file
@@ -19,7 +16,7 @@ macro_rules! define_ass_test {
     ($test_name:ident, $test_file:expr) => {
         #[test]
         fn $test_name() {
-            let input = include_str!(concat!("../tests/ass/", $test_file, ".ytt"));
+            let input = include_str!(concat!("../../tests/ass/", $test_file, ".ytt"));
             let timed_text = match TimedText::from_str(input) {
                 Ok(tt) => tt,
                 Err(e) => panic!(
@@ -55,7 +52,7 @@ macro_rules! define_ass_test {
 
             // Parse expected and actual ASS files for semantic comparison
             let expected_content =
-                include_str!(concat!("../tests/ass/", $test_file, ".reverse.ass"));
+                include_str!(concat!("../../tests/ass/", $test_file, ".reverse.ass"));
 
             let expected_parsed = parse_ass(expected_content).unwrap_or_else(|e| {
                 panic!(
@@ -75,20 +72,28 @@ macro_rules! define_ass_test {
             if let Err(diffs) = compare_ass_files(&expected_parsed, &actual_parsed) {
                 // Helper to count events in a Script
                 fn count_events(script: &ass_core::parser::Script) -> usize {
-                    script.sections().iter().filter_map(|s| match s {
-                        ass_core::parser::ast::Section::Events(events) => Some(events.len()),
-                        _ => None,
-                    }).sum()
+                    script
+                        .sections()
+                        .iter()
+                        .filter_map(|s| match s {
+                            ass_core::parser::ast::Section::Events(events) => Some(events.len()),
+                            _ => None,
+                        })
+                        .sum()
                 }
-                
+
                 // Helper to count styles in a Script
                 fn count_styles(script: &ass_core::parser::Script) -> usize {
-                    script.sections().iter().filter_map(|s| match s {
-                        ass_core::parser::ast::Section::Styles(styles) => Some(styles.len()),
-                        _ => None,
-                    }).sum()
+                    script
+                        .sections()
+                        .iter()
+                        .filter_map(|s| match s {
+                            ass_core::parser::ast::Section::Styles(styles) => Some(styles.len()),
+                            _ => None,
+                        })
+                        .sum()
                 }
-                
+
                 eprintln!(
                     "\n[round-trip stage: {}] {} CONVERSION DIFFERENCES:",
                     STAGE_COMPARE_ASS, $test_file

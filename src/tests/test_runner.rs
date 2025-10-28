@@ -1,4 +1,4 @@
-use crate::ass_test_helpers::{compare_ass_files, parse_ass};
+use super::ass_test_helpers::{compare_ass_files, parse_ass};
 use srv3_ttml::TimedText;
 use std::fs::{self, File};
 use std::io::Write;
