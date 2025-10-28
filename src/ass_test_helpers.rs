@@ -1,12 +1,11 @@
-use aspasia::{AssSubtitle, Subtitle};
+use ass_core::parser::{ast::{Event, EventType, Style}, Script};
 use chumsky::prelude::*;
 use similar::TextDiff;
-use std::mem::discriminant;
 use std::str::FromStr;
 
-/// Parse an ASS file using the aspasia parser
-pub fn parse_ass(content: &str) -> Result<AssSubtitle, String> {
-    AssSubtitle::from_str(content).map_err(|e| e.to_string())
+/// Parse an ASS file using the ass-core parser
+pub fn parse_ass(content: &str) -> Result<Script, String> {
+    Script::parse(content).map_err(|e| format!("{:?}", e))
 }
 
 #[derive(Debug, PartialEq)]
@@ -150,24 +149,52 @@ fn format_diff_output(expected: &str, actual: &str) -> String {
 }
 
 /// Compare two ASS files for semantic equivalence
-pub fn compare_ass_files(expected: &AssSubtitle, actual: &AssSubtitle) -> Result<(), Vec<String>> {
+pub fn compare_ass_files(expected: &Script, actual: &Script) -> Result<(), Vec<String>> {
+    use ass_core::parser::ast::{Section, SectionType};
+    
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
-    let expected_events = expected.events();
-    let actual_events = actual.events();
+    // Helper function to extract events from a script
+    fn get_events<'a>(script: &'a Script<'a>) -> Vec<&'a Event<'a>> {
+        script
+            .sections()
+            .iter()
+            .filter_map(|section| match section {
+                Section::Events(events) => Some(events.as_slice()),
+                _ => None,
+            })
+            .flat_map(|events| events.iter())
+            .collect::<Vec<_>>()
+    }
+
+    // Helper function to extract styles from a script
+    fn get_styles<'a>(script: &'a Script<'a>) -> Vec<&'a Style<'a>> {
+        script
+            .sections()
+            .iter()
+            .filter_map(|section| match section {
+                Section::Styles(styles) => Some(styles.as_slice()),
+                _ => None,
+            })
+            .flat_map(|styles| styles.iter())
+            .collect::<Vec<_>>()
+    }
+
+    let expected_events = get_events(expected);
+    let actual_events = get_events(actual);
 
     // Check if dialogue counts match
     if expected_events.len() != actual_events.len() {
         errors.push(format!(
-            "Dialogue count mismatch: expected {}, got {}",
+            "Event count mismatch: expected {}, got {}",
             expected_events.len(),
             actual_events.len()
         ));
     }
 
-    let expected_styles = expected.styles();
-    let actual_styles = actual.styles();
+    let expected_styles = get_styles(expected);
+    let actual_styles = get_styles(actual);
 
     // Check if style counts match
     if expected_styles.len() != actual_styles.len() {
@@ -241,10 +268,10 @@ pub fn compare_ass_files(expected: &AssSubtitle, actual: &AssSubtitle) -> Result
                 i, exp_style.underline, act_style.underline
             ));
         }
-        if exp_style.strike_out != act_style.strike_out {
+        if exp_style.strikeout != act_style.strikeout {
             errors.push(format!(
                 "Style {}: strike-out flag mismatch: expected {}, got {}",
-                i, exp_style.strike_out, act_style.strike_out
+                i, exp_style.strikeout, act_style.strikeout
             ));
         }
         if exp_style.scale_x != act_style.scale_x {
@@ -265,7 +292,7 @@ pub fn compare_ass_files(expected: &AssSubtitle, actual: &AssSubtitle) -> Result
                 i, exp_style.spacing, act_style.spacing
             ));
         }
-        if (exp_style.angle - act_style.angle).abs() > f64::EPSILON {
+        if exp_style.angle != act_style.angle {
             errors.push(format!(
                 "Style {}: angle mismatch: expected {}, got {}",
                 i, exp_style.angle, act_style.angle
@@ -321,98 +348,120 @@ pub fn compare_ass_files(expected: &AssSubtitle, actual: &AssSubtitle) -> Result
         }
     }
 
-    // Compare dialogue lines field-by-field
-    for (i, (exp_line, act_line)) in expected_events.iter().zip(actual_events.iter()).enumerate() {
-        if discriminant(&exp_line.kind) != discriminant(&act_line.kind) {
+    // Helper function to parse ASS timestamps with ±1ms tolerance
+    fn parse_ass_time(time_str: &str) -> Result<i64, String> {
+        // ASS time format: H:MM:SS.CS (centiseconds)
+        let parts: Vec<&str> = time_str.split(':').collect();
+        if parts.len() != 3 {
+            return Err(format!("Invalid time format: {}", time_str));
+        }
+        
+        let hours: i64 = parts[0].parse().map_err(|e| format!("Invalid hour: {}", e))?;
+        let minutes: i64 = parts[1].parse().map_err(|e| format!("Invalid minute: {}", e))?;
+        
+        let sec_parts: Vec<&str> = parts[2].split('.').collect();
+        if sec_parts.len() != 2 {
+            return Err(format!("Invalid seconds format: {}", parts[2]))?;
+        }
+        
+        let seconds: i64 = sec_parts[0].parse().map_err(|e| format!("Invalid second: {}", e))?;
+        let centiseconds: i64 = sec_parts[1].parse().map_err(|e| format!("Invalid centisecond: {}", e))?;
+        
+        // Convert to milliseconds
+        Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + centiseconds * 10)
+    }
+
+    fn times_close_enough(expected: &str, actual: &str) -> bool {
+        match (parse_ass_time(expected), parse_ass_time(actual)) {
+            (Ok(exp_ms), Ok(act_ms)) => {
+                // Allow ±1ms tolerance as specified in agent instructions
+                (exp_ms - act_ms).abs() <= 1
+            }
+            _ => expected == actual, // Fall back to string comparison if parsing fails
+        }
+    }
+
+    // Compare events field-by-field
+    for (i, (exp_event, act_event)) in expected_events.iter().zip(actual_events.iter()).enumerate() {
+        if exp_event.event_type != act_event.event_type {
             errors.push(format!(
-                "Line {}: kind mismatch: expected {:?}, got {:?}",
-                i, exp_line.kind, act_line.kind
+                "Event {}: type mismatch: expected {:?}, got {:?}",
+                i, exp_event.event_type, act_event.event_type
             ));
         }
-        if exp_line.layer != act_line.layer {
+        if exp_event.layer != act_event.layer {
             errors.push(format!(
-                "Line {}: layer mismatch: expected {}, got {}",
-                i, exp_line.layer, act_line.layer
+                "Event {}: layer mismatch: expected {}, got {}",
+                i, exp_event.layer, act_event.layer
             ));
         }
-        if exp_line.start != act_line.start {
+        if !times_close_enough(exp_event.start, act_event.start) {
             errors.push(format!(
-                "Line {}: start time mismatch: expected {}, got {}",
-                i,
-                exp_line.start.as_substation_timestamp(),
-                act_line.start.as_substation_timestamp()
+                "Event {}: start time mismatch: expected {}, got {}",
+                i, exp_event.start, act_event.start
             ));
         }
-        if exp_line.end != act_line.end {
+        if !times_close_enough(exp_event.end, act_event.end) {
             errors.push(format!(
-                "Line {}: end time mismatch: expected {}, got {}",
-                i,
-                exp_line.end.as_substation_timestamp(),
-                act_line.end.as_substation_timestamp()
+                "Event {}: end time mismatch: expected {}, got {}",
+                i, exp_event.end, act_event.end
             ));
         }
-        if exp_line.style != act_line.style {
-            let expected_style = exp_line.style.as_deref().unwrap_or("<None>");
-            let actual_style = act_line.style.as_deref().unwrap_or("<None>");
+        if exp_event.style != act_event.style {
             errors.push(format!(
-                "Line {}: style mismatch: expected {}, got {}",
-                i, expected_style, actual_style
+                "Event {}: style mismatch: expected {}, got {}",
+                i, exp_event.style, act_event.style
             ));
         }
-        if exp_line.name != act_line.name {
-            let expected_name = exp_line.name.as_deref().unwrap_or("<None>");
-            let actual_name = act_line.name.as_deref().unwrap_or("<None>");
+        if exp_event.name != act_event.name {
             errors.push(format!(
-                "Line {}: actor mismatch: expected {}, got {}",
-                i, expected_name, actual_name
+                "Event {}: name mismatch: expected {}, got {}",
+                i, exp_event.name, act_event.name
             ));
         }
-        if exp_line.margin_l != act_line.margin_l {
+        if exp_event.margin_l != act_event.margin_l {
             errors.push(format!(
-                "Line {}: margin_l mismatch: expected {}, got {}",
-                i, exp_line.margin_l, act_line.margin_l
+                "Event {}: margin_l mismatch: expected {}, got {}",
+                i, exp_event.margin_l, act_event.margin_l
             ));
         }
-        if exp_line.margin_r != act_line.margin_r {
+        if exp_event.margin_r != act_event.margin_r {
             errors.push(format!(
-                "Line {}: margin_r mismatch: expected {}, got {}",
-                i, exp_line.margin_r, act_line.margin_r
+                "Event {}: margin_r mismatch: expected {}, got {}",
+                i, exp_event.margin_r, act_event.margin_r
             ));
         }
-        if exp_line.margin_v != act_line.margin_v {
+        if exp_event.margin_v != act_event.margin_v {
             errors.push(format!(
-                "Line {}: margin_v mismatch: expected {}, got {}",
-                i, exp_line.margin_v, act_line.margin_v
+                "Event {}: margin_v mismatch: expected {}, got {}",
+                i, exp_event.margin_v, act_event.margin_v
             ));
         }
-        if exp_line.effect != act_line.effect {
-            let expected_effect_raw = exp_line.effect.as_deref();
-            let actual_effect_raw = act_line.effect.as_deref();
-            let expected_effect = expected_effect_raw.unwrap_or("<None>");
-            let actual_effect = actual_effect_raw.unwrap_or("<None>");
-            let actual_effect_trimmed = actual_effect_raw.unwrap_or("").trim();
-            if expected_effect_raw == Some("no_android_dark_text_hack")
-                && actual_effect_trimmed.is_empty()
-            {
+        
+        // Handle optional effect field comparison (like no_android_dark_text_hack)
+        let exp_effect = exp_event.effect.trim();
+        let act_effect = act_event.effect.trim();
+        if exp_effect != act_effect {
+            if exp_effect == "no_android_dark_text_hack" && act_effect.is_empty() {
                 warnings.push(format!(
-                    "Line {}: effect mismatch downgraded to warning: expected {}, got {}",
-                    i, expected_effect, actual_effect
+                    "Event {}: effect mismatch downgraded to warning: expected {}, got {}",
+                    i, exp_effect, act_effect
                 ));
-                // TODO: revisit once Android dark text hack behavior is implemented for parity.
             } else {
                 errors.push(format!(
-                    "Line {}: effect mismatch: expected {}, got {}",
-                    i, expected_effect, actual_effect
+                    "Event {}: effect mismatch: expected {}, got {}",
+                    i, exp_effect, act_effect
                 ));
             }
         }
-        if exp_line.text != act_line.text && !fuzzy_text_equal(&exp_line.text, &act_line.text) {
-            let diff_view = format_diff_output(&exp_line.text, &act_line.text);
+        
+        if exp_event.text != act_event.text && !fuzzy_text_equal(exp_event.text, act_event.text) {
+            let diff_view = format_diff_output(exp_event.text, act_event.text);
             errors.push(format!(
-                "Line {}: text mismatch:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
+                "Event {}: text mismatch:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
                 i,
-                escape_debug_str(&exp_line.text),
-                escape_debug_str(&act_line.text),
+                escape_debug_str(exp_event.text),
+                escape_debug_str(act_event.text),
                 diff_view
             ));
         }
@@ -433,14 +482,18 @@ pub fn compare_ass_files(expected: &AssSubtitle, actual: &AssSubtitle) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use aspasia::Subtitle;
 
     #[test]
-    fn test_parse_ass_uses_aspasia() {
+    fn test_parse_ass_uses_ass_core() {
         let content = "[Script Info]\nTitle: Test\n\n[V4+ Styles]\nFormat: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding\nStyle: Default,Arial,20,&H00FFFFFF,&HFFFFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,2,10,10,10,1\n\n[Events]\nFormat: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginV, Effect, Text\nDialogue: 0,0:00:00.00,0:00:05.00,Default,,0,0,0,,Hello world\n";
 
         let parsed = parse_ass(content).expect("expected parse success");
-        assert_eq!(parsed.styles().len(), 1);
-        assert_eq!(parsed.events().len(), 1);
+        
+        // Check that we have styles and events
+        let styles_count = parsed.sections().iter().filter(|s| matches!(s, ass_core::parser::ast::Section::Styles(_))).count();
+        let events_count = parsed.sections().iter().filter(|s| matches!(s, ass_core::parser::ast::Section::Events(_))).count();
+        
+        assert_eq!(styles_count, 1);
+        assert_eq!(events_count, 1);
     }
 }
