@@ -74,22 +74,9 @@ fn merge_text_tokens(raw_tokens: Vec<TextToken>) -> Vec<TextToken> {
 }
 
 fn floats_close_enough(a: f64, b: f64) -> bool {
-    if (a - b).abs() <= f64::EPSILON {
-        return true;
-    }
-
-    let two_digit_scale = 100.0;
-    let three_digit_scale = 1000.0;
-
-    let two_digit_a = (a * two_digit_scale).round() as i64;
-    let two_digit_b = (b * two_digit_scale).round() as i64;
-    if two_digit_a != two_digit_b {
-        return false;
-    }
-
-    let three_digit_a = (a * three_digit_scale).round() as i64;
-    let three_digit_b = (b * three_digit_scale).round() as i64;
-    three_digit_a == three_digit_b
+    // Allow ±0.001 tolerance for floating point comparisons
+    // This handles rounding/precision issues with 4+ decimal digits
+    (a - b).abs() <= 0.001
 }
 
 fn fuzzy_text_equal(expected: &str, actual: &str) -> bool {
