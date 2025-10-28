@@ -3,6 +3,7 @@ use srv3_ttml::TimedText;
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::Path;
+use std::str::FromStr;
 
 fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
     srv3tovtt_crate::to_ass(timed_text)

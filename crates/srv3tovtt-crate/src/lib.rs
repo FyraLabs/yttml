@@ -6,9 +6,9 @@ use srv3_ttml::{
     AnchorPoint, BodyElement, EdgeType, FontStyle, Head, Paragraph as TimedTextParagraph, Pen,
     TextOffset,
 };
-use tracing::debug;
 use std::fmt::Write;
 use std::str::FromStr;
+use tracing::debug;
 
 fn hex_to_ass_color(hex: &HexColor) -> String {
     let hex_str = format!("{:?}", hex);
@@ -626,9 +626,9 @@ fn font_name_for_style(style: &FontStyle) -> &'static str {
         FontStyle::MonoSerif => "Courier New",
         FontStyle::ProportionalSerif => "Times New Roman",
         FontStyle::MonoSans => "Lucida Console",
-        FontStyle::Casual => "Comic Sans MS",
+        FontStyle::Casual => "Comic Sans Ms",
         FontStyle::Cursive => "Monotype Corsiva",
-        FontStyle::SmallCaps => "Arial",
+        FontStyle::SmallCaps => "Carrois Gothic Sc",
     }
 }
 
@@ -726,7 +726,6 @@ fn floats_equal(a: f64, b: f64) -> bool {
     (a - b).abs() < 0.00005
 }
 
-
 #[tracing::instrument]
 fn trim_ass_edge_whitespace(text: String) -> String {
     text.trim_matches([' ', '\u{200B}']).to_string()
@@ -792,7 +791,6 @@ fn ass_placeholders_to_plain_text(text: &str) -> String {
         .replace(MARKER_LIT_LBRACE, "{")
         .replace(MARKER_LIT_RBRACE, "}")
 }
-
 
 #[tracing::instrument]
 fn transition_tags(from: &FormattingState, to: &FormattingState) -> Vec<String> {

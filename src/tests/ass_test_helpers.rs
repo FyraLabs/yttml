@@ -1,82 +1,11 @@
-use ariadne::{sources, Color, Label, Report, ReportKind};
-use ass_core::parser::{ast::Event, Script};
-use chumsky::prelude::*;
+use ariadne::{sources, Label, Report, ReportKind};
+use ass_core::analysis::events::TextAnalysis;
+use ass_core::analysis::ScriptAnalysis;
+use ass_core::parser::Script;
 
 /// Parse an ASS file using the ass-core parser
 pub fn parse_ass(content: &str) -> Result<Script<'_>, String> {
     Script::parse(content).map_err(|e| format!("{:?}", e))
-}
-
-#[derive(Debug, PartialEq)]
-enum TextToken {
-    Text(String),
-    Number(f64),
-}
-
-#[derive(Debug, PartialEq, Eq)]
-enum FuzzyMatchResult {
-    Exact,
-    NumericOnly,
-    Different,
-}
-
-fn tokenize_text(input: &str) -> Vec<TextToken> {
-    if input.is_empty() {
-        return Vec::new();
-    }
-
-    let digits = || text::digits::<_, extra::Err<Simple<char>>>(10).collect::<String>();
-
-    let number = just('+')
-        .or(just('-'))
-        .or_not()
-        .then(digits())
-        .then(just('.').then(digits()).or_not())
-        .map(|((sign, int_part), frac)| {
-            let mut repr = String::new();
-            if let Some(sign) = sign {
-                repr.push(sign);
-            }
-            repr.push_str(&int_part);
-            if let Some((dot, frac_digits)) = frac {
-                repr.push(dot);
-                repr.push_str(&frac_digits);
-            }
-
-            repr.parse::<f64>()
-                .map(TextToken::Number)
-                .unwrap_or_else(|_| TextToken::Text(repr))
-        });
-
-    let token_parser = number
-        .or(any().map(|c: char| TextToken::Text(c.to_string())))
-        .repeated()
-        .collect::<Vec<_>>();
-
-    match token_parser.parse(input).into_result() {
-        Ok(raw_tokens) => merge_text_tokens(raw_tokens),
-        Err(_) => vec![TextToken::Text(input.to_string())],
-    }
-}
-
-fn merge_text_tokens(raw_tokens: Vec<TextToken>) -> Vec<TextToken> {
-    let mut merged = Vec::new();
-    for token in raw_tokens {
-        match token {
-            TextToken::Text(chunk) => {
-                if chunk.is_empty() {
-                    continue;
-                }
-                if let Some(TextToken::Text(existing)) = merged.last_mut() {
-                    existing.push_str(&chunk);
-                } else {
-                    merged.push(TextToken::Text(chunk));
-                }
-            }
-            TextToken::Number(value) => merged.push(TextToken::Number(value)),
-        }
-    }
-    merged
 }
 
 fn floats_close_enough(a: f64, b: f64) -> bool {
@@ -95,98 +24,64 @@ fn parse_pos_coords(input: &str) -> Option<(f64, f64)> {
     Some((x, y))
 }
 
-fn extract_pos_structure(text: &str) -> Option<(String, Vec<(f64, f64)>)> {
-    const PREFIX: &str = "\\pos(";
-
-    let mut sanitized = String::with_capacity(text.len());
-    let mut coords = Vec::new();
-    let mut index = 0;
-
-    while index < text.len() {
-        if text[index..].starts_with(PREFIX) {
-            let start = index + PREFIX.len();
-            let remainder = &text[start..];
-            let closing_offset = remainder.find(')')?;
-            let inner = &remainder[..closing_offset];
-            let (x, y) = parse_pos_coords(inner)?;
-            coords.push((x, y));
-            sanitized.push_str("\\pos(#,#)");
-            index = start + closing_offset + 1;
-        } else {
-            let ch = text[index..].chars().next()?;
-            sanitized.push(ch);
-            index += ch.len_utf8();
-        }
-    }
-
-    Some((sanitized, coords))
-}
-
-fn pos_difference_only(expected: &str, actual: &str) -> bool {
-    match (
-        extract_pos_structure(expected),
-        extract_pos_structure(actual),
-    ) {
-        (Some((exp_sanitized, exp_coords)), Some((act_sanitized, act_coords))) => {
-            if exp_coords.is_empty() || exp_coords.len() != act_coords.len() {
-                return false;
-            }
-
-            if exp_sanitized != act_sanitized {
-                return false;
-            }
-
-            exp_coords
-                .iter()
-                .zip(act_coords.iter())
-                .all(|(&(exp_x, exp_y), &(act_x, act_y))| {
-                    floats_close_enough(exp_x, act_x) && floats_close_enough(exp_y, act_y)
-                })
-        }
-        _ => false,
-    }
-}
-
-fn fuzzy_text_compare(expected: &str, actual: &str) -> FuzzyMatchResult {
-    if expected == actual {
-        return FuzzyMatchResult::Exact;
-    }
-
-    let expected_tokens = tokenize_text(expected);
-    let actual_tokens = tokenize_text(actual);
-
-    if expected_tokens.len() != actual_tokens.len() {
-        return FuzzyMatchResult::Different;
-    }
-
-    let mut saw_numeric_delta = false;
-
-    for (expected_token, actual_token) in expected_tokens.iter().zip(actual_tokens.iter()) {
-        match (expected_token, actual_token) {
-            (TextToken::Text(expected_text), TextToken::Text(actual_text)) => {
-                if expected_text != actual_text {
-                    return FuzzyMatchResult::Different;
-                }
-            }
-            (TextToken::Number(expected_number), TextToken::Number(actual_number)) => {
-                if expected_number == actual_number {
-                    continue;
-                }
-
-                if floats_close_enough(*expected_number, *actual_number) {
-                    saw_numeric_delta = true;
-                } else {
-                    return FuzzyMatchResult::Different;
-                }
-            }
-            _ => return FuzzyMatchResult::Different,
-        }
-    }
-
-    if saw_numeric_delta {
-        FuzzyMatchResult::NumericOnly
+fn extract_pos_structure(pos_str: &str) -> Option<(f64, f64)> {
+    if pos_str.starts_with('(') && pos_str.ends_with(')') {
+        let inner = &pos_str[1..pos_str.len() - 1];
+        parse_pos_coords(inner)
     } else {
-        FuzzyMatchResult::Exact
+        None
+    }
+}
+
+fn compare_pos_arg(exp_pos: &str, act_pos: &str) -> Result<(), (Vec<String>, Vec<String>)> {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+    // We should have a tolerance here of ±0.001 for both X and Y coordinates
+    let (expected_x, expected_y) = match extract_pos_structure(exp_pos) {
+        Some((x, y)) => (x, y),
+        None => {
+            errors.push(format!("Invalid position format in fixture!: {}", exp_pos));
+            return Err((errors, warnings));
+        }
+    };
+
+    let (actual_x, actual_y) = match extract_pos_structure(act_pos) {
+        Some((x, y)) => (x, y),
+        None => {
+            errors.push(format!("Invalid position format: {}", act_pos));
+            return Err((errors, warnings));
+        }
+    };
+
+    fn compare_coordinate(
+        expected: f64,
+        actual: f64,
+        coord_name: &str,
+        errors: &mut Vec<String>,
+        warnings: &mut Vec<String>,
+    ) {
+        if expected != actual {
+            if !floats_close_enough(expected, actual) {
+                errors.push(format!(
+                    "{} coordinate mismatch: expected {}, got {}",
+                    coord_name, expected, actual
+                ));
+            } else {
+                warnings.push(format!(
+                    "{} coordinate mismatch within tolerance: expected {}, got {}",
+                    coord_name, expected, actual
+                ));
+            }
+        }
+    }
+
+    compare_coordinate(expected_x, actual_x, "X", &mut errors, &mut warnings);
+    compare_coordinate(expected_y, actual_y, "Y", &mut errors, &mut warnings);
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err((errors, warnings))
     }
 }
 
@@ -256,15 +151,9 @@ fn format_diff_output(expected: &str, actual: &str) -> String {
     )
     .with_message("ASS text mismatch")
     .with_label(
-        Label::new(("expected.ass", expected_start..expected_end))
-            .with_message("expected segment")
-            .with_color(Color::Yellow),
+        Label::new(("expected.ass", expected_start..expected_end)).with_message("expected segment"),
     )
-    .with_label(
-        Label::new(("actual.ass", actual_start..actual_end))
-            .with_message("actual segment")
-            .with_color(Color::Cyan),
-    )
+    .with_label(Label::new(("actual.ass", actual_start..actual_end)).with_message("actual segment"))
     .finish();
 
     let mut buffer = Vec::new();
@@ -286,82 +175,116 @@ fn format_diff_output(expected: &str, actual: &str) -> String {
         .join("\n")
 }
 
-/// Compare two ASS files for semantic equivalence
-pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(), Vec<String>> {
-    use ass_core::parser::ast::Section;
-
+pub fn compare_text(
+    expected: &TextAnalysis,
+    actual: &TextAnalysis,
+) -> Result<(), (Vec<String>, Vec<String>)> {
     let mut errors = Vec::new();
     let mut warnings = Vec::new();
 
-    // Helper function to extract events from a script
-    fn get_events<'a>(script: &'a Script<'a>) -> Vec<&'a Event<'a>> {
-        script
-            .sections()
-            .iter()
-            .filter_map(|section| match section {
-                Section::Events(events) => Some(events.as_slice()),
-                _ => None,
-            })
-            .flat_map(|events| events.iter())
-            .collect::<Vec<_>>()
+    let (expected_len, actual_len) = (expected.char_count(), actual.char_count());
+    // let expected_tokens = expected.tokens();
+    // let actual_tokens = actual.tokens();
+
+    if expected_len != actual_len {
+        errors.push(format!(
+            "Text character count mismatch: expected {}, got {}",
+            expected_len, actual_len
+        ));
+        return Err((errors, warnings));
     }
 
-    let expected_events = get_events(expected);
-    let actual_events = get_events(actual);
+    let expected_linelen = expected.line_count();
+    let actual_linelen = actual.line_count();
 
-    // Check if dialogue counts match
-    if expected_events.len() != actual_events.len() {
+    if expected_linelen != actual_linelen {
         errors.push(format!(
-            "Event count mismatch: expected {}, got {}",
-            expected_events.len(),
-            actual_events.len()
+            "Text line count mismatch: expected {}, got {}",
+            expected_linelen, actual_linelen
         ));
     }
 
-    // Helper function to parse ASS timestamps with ±1ms tolerance
-    fn parse_ass_time(time_str: &str) -> Result<i64, String> {
-        // ASS time format: H:MM:SS.CS (centiseconds)
-        let parts: Vec<&str> = time_str.split(':').collect();
-        if parts.len() != 3 {
-            return Err(format!("Invalid time format: {}", time_str));
-        }
-
-        let hours: i64 = parts[0]
-            .parse()
-            .map_err(|e| format!("Invalid hour: {}", e))?;
-        let minutes: i64 = parts[1]
-            .parse()
-            .map_err(|e| format!("Invalid minute: {}", e))?;
-
-        let sec_parts: Vec<&str> = parts[2].split('.').collect();
-        if sec_parts.len() != 2 {
-            return Err(format!("Invalid seconds format: {}", parts[2]));
-        }
-
-        let seconds: i64 = sec_parts[0]
-            .parse()
-            .map_err(|e| format!("Invalid second: {}", e))?;
-        let centiseconds: i64 = sec_parts[1]
-            .parse()
-            .map_err(|e| format!("Invalid centisecond: {}", e))?;
-
-        // Convert to milliseconds
-        Ok(hours * 3600000 + minutes * 60000 + seconds * 1000 + centiseconds * 10)
+    // Compare plain text
+    let (expected_text, actual_text) = (expected.plain_text(), actual.plain_text());
+    if expected_text != actual_text {
+        errors.push(format!(
+            "Text content mismatch:\n{}",
+            format_diff_output(expected_text, actual_text)
+        ));
     }
 
-    fn times_close_enough(expected: &str, actual: &str) -> bool {
-        match (parse_ass_time(expected), parse_ass_time(actual)) {
-            (Ok(exp_ms), Ok(act_ms)) => {
-                // Allow ±1ms tolerance as specified in agent instructions
-                (exp_ms - act_ms).abs() <= 1
+    let expected_tags = expected.override_tags();
+    let actual_tags = actual.override_tags();
+
+    for (i, (exp_tag, act_tag)) in expected_tags.iter().zip(actual_tags.iter()).enumerate() {
+        let exp_args = exp_tag.args();
+        let act_args = act_tag.args();
+        let exp_name = exp_tag.name();
+        let act_name = act_tag.name();
+
+        // Explicit handling for \pos tag comparison
+        // We should have a tolerance here of ±0.001 for both X and Y coordinates
+        if act_name == "pos" {
+            match compare_pos_arg(exp_args, act_args) {
+                Ok(_) => {}
+                Err((mut err_list, mut warn_list)) => {
+                    for err in err_list.drain(..) {
+                        errors.push(format!("Tag {i} (pos) argument error: {}", err));
+                    }
+                    for warn in warn_list.drain(..) {
+                        warnings.push(format!("Tag {i} (pos) argument warning: {}", warn));
+                    }
+                }
             }
-            _ => expected == actual, // Fall back to string comparison if parsing fails
+        } else if exp_args != act_args {
+            errors.push(format!(
+                "Tag {i} ({exp_name}) argument mismatch: expected {:?}, got {:?}",
+                exp_args, act_args
+            ));
         }
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err((errors, warnings))
+    }
+}
+
+/// Compare two ASS files for semantic equivalence
+pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(), Vec<String>> {
+    let mut errors = Vec::new();
+    let mut warnings = Vec::new();
+
+    let actual_analysis = ScriptAnalysis::analyze(actual).unwrap();
+    let expected_analysis = ScriptAnalysis::analyze(expected).unwrap();
+
+    let expected_dialogue_infos = expected_analysis.dialogue_info();
+    let actual_dialogue_infos = actual_analysis.dialogue_info();
+
+    // Check if dialogue counts match
+    if expected_dialogue_infos.len() != actual_dialogue_infos.len() {
+        errors.push(format!(
+            "Dialogue count mismatch: expected {}, got {}",
+            expected_dialogue_infos.len(),
+            actual_dialogue_infos.len()
+        ));
+    }
+
+    /// Compare centisecs with ±1cs tolerance
+    fn times_close_enough(expected: u32, actual: u32) -> bool {
+        (expected - actual).abs_diff(1) <= 1
     }
 
     // Compare events field-by-field
-    for (i, (exp_event, act_event)) in expected_events.iter().zip(actual_events.iter()).enumerate()
+    for (i, (exp_info, act_info)) in expected_dialogue_infos
+        .iter()
+        .zip(actual_dialogue_infos.iter())
+        .enumerate()
     {
+        let exp_event = exp_info.event();
+        let act_event = act_info.event();
+
         if exp_event.event_type != act_event.event_type {
             errors.push(format!(
                 "Event {}: type mismatch: expected {:?}, got {:?}",
@@ -374,16 +297,27 @@ pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(
                 i, exp_event.layer, act_event.layer
             ));
         }
-        if !times_close_enough(exp_event.start, act_event.start) {
+
+        if !times_close_enough(
+            exp_event.start_time_cs().unwrap(),
+            act_event.start_time_cs().unwrap(),
+        ) {
             errors.push(format!(
                 "Event {}: start time mismatch: expected {}, got {}",
-                i, exp_event.start, act_event.start
+                i,
+                exp_event.start_time_cs().unwrap(),
+                act_event.start_time_cs().unwrap()
             ));
         }
-        if !times_close_enough(exp_event.end, act_event.end) {
+        if !times_close_enough(
+            exp_event.end_time_cs().unwrap(),
+            act_event.end_time_cs().unwrap(),
+        ) {
             errors.push(format!(
                 "Event {}: end time mismatch: expected {}, got {}",
-                i, exp_event.end, act_event.end
+                i,
+                exp_event.end_time_cs().unwrap(),
+                act_event.end_time_cs().unwrap()
             ));
         }
         if exp_event.style != act_event.style {
@@ -417,6 +351,22 @@ pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(
             ));
         }
 
+        // handle extra stuff
+
+        if let (Ok(exp_dur), Ok(act_dur)) = (exp_event.duration_cs(), act_event.duration_cs()) {
+            if exp_dur != act_dur {
+                errors.push(format!(
+                    "Event {}: duration mismatch: expected {:?}, got {:?}",
+                    i, exp_dur, act_dur
+                ));
+            }
+        } else {
+            errors.push(format!(
+                "Event {}: duration could not be determined for comparison",
+                i
+            ));
+        }
+
         // Handle optional effect field comparison (like no_android_dark_text_hack)
         let exp_effect = exp_event.effect.trim();
         let act_effect = act_event.effect.trim();
@@ -434,28 +384,18 @@ pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(
             }
         }
 
-        if exp_event.text != act_event.text {
-            match fuzzy_text_compare(exp_event.text, act_event.text) {
-                FuzzyMatchResult::Exact => {}
-                FuzzyMatchResult::NumericOnly => {
-                    let diff_view = format_diff_output(exp_event.text, act_event.text);
-                    warnings.push(format!(
-                        "Event {}: text numeric-only mismatch downgraded to warning:\n{}",
-                        i, diff_view
-                    ));
+        let expected_text = exp_info.text_analysis();
+
+        let actual_text = act_info.text_analysis();
+
+        match compare_text(expected_text, actual_text) {
+            Ok(_) => {}
+            Err((mut err_list, mut warn_list)) => {
+                for err in err_list.drain(..) {
+                    errors.push(format!("Event {}: {}", i, err));
                 }
-                FuzzyMatchResult::Different => {
-                    if pos_difference_only(exp_event.text, act_event.text) {
-                        let diff_view = format_diff_output(exp_event.text, act_event.text);
-                        warnings.push(format!(
-                            "Event {}: text mismatch limited to pos() rounding, downgraded to warning:\n{}",
-                            i,
-                            diff_view
-                        ));
-                    } else {
-                        let diff_view = format_diff_output(exp_event.text, act_event.text);
-                        errors.push(format!("Event {}: text mismatch:\n{}", i, diff_view));
-                    }
+                for warn in warn_list.drain(..) {
+                    warnings.push(format!("Event {}: {}", i, warn));
                 }
             }
         }

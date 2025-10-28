@@ -6,6 +6,7 @@ const STAGE_PARSE_EXPECTED_ASS: &str = "parse-expected-ass";
 const STAGE_PARSE_ACTUAL_ASS: &str = "parse-actual-ass";
 const STAGE_COMPARE_ASS: &str = "compare-ass";
 
+
 fn to_ass(timed_text: &TimedText) -> std::io::Result<String> {
     srv3tovtt_crate::to_ass(timed_text)
 }
@@ -16,6 +17,7 @@ macro_rules! define_ass_test {
     ($test_name:ident, $test_file:expr) => {
         #[test]
         fn $test_name() {
+            use std::str::FromStr;
             let input = include_str!(concat!("../../tests/ass/", $test_file, ".ytt"));
             let timed_text = match TimedText::from_str(input) {
                 Ok(tt) => tt,
@@ -72,28 +74,20 @@ macro_rules! define_ass_test {
             if let Err(diffs) = compare_ass_files(&expected_parsed, &actual_parsed) {
                 // Helper to count events in a Script
                 fn count_events(script: &ass_core::parser::Script) -> usize {
-                    script
-                        .sections()
-                        .iter()
-                        .filter_map(|s| match s {
-                            ass_core::parser::ast::Section::Events(events) => Some(events.len()),
-                            _ => None,
-                        })
-                        .sum()
+                    script.sections().iter().filter_map(|s| match s {
+                        ass_core::parser::ast::Section::Events(events) => Some(events.len()),
+                        _ => None,
+                    }).sum()
                 }
-
+                
                 // Helper to count styles in a Script
                 fn count_styles(script: &ass_core::parser::Script) -> usize {
-                    script
-                        .sections()
-                        .iter()
-                        .filter_map(|s| match s {
-                            ass_core::parser::ast::Section::Styles(styles) => Some(styles.len()),
-                            _ => None,
-                        })
-                        .sum()
+                    script.sections().iter().filter_map(|s| match s {
+                        ass_core::parser::ast::Section::Styles(styles) => Some(styles.len()),
+                        _ => None,
+                    }).sum()
                 }
-
+                
                 eprintln!(
                     "\n[round-trip stage: {}] {} CONVERSION DIFFERENCES:",
                     STAGE_COMPARE_ASS, $test_file

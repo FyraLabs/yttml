@@ -13,11 +13,6 @@ pub struct TimedText {
     pub head: Option<Head>,
     pub body: Body,
 }
-impl TimedText {
-    pub fn from_str(s: &str) -> Result<Self, quick_xml::DeError> {
-        quick_xml::de::from_str(s)
-    }
-}
 
 impl FromStr for TimedText {
     type Err = quick_xml::DeError;
@@ -220,10 +215,12 @@ pub enum EdgeType {
 
 #[derive(Debug, Serialize_repr, Deserialize_repr)]
 #[repr(u8)]
+#[derive(Default)]
 pub enum FontStyle {
     #[serde(default)]
     /// Default font style.
     /// Implicitly defaults to Proportional Sans (Roboto)
+    #[default]
     Default = 0,
     /// Monospace Serif.
     /// Courier New
@@ -246,12 +243,6 @@ pub enum FontStyle {
     /// Small Capitals.
     /// Arial with `font-variant: small-caps`
     SmallCaps = 7,
-}
-
-impl Default for FontStyle {
-    fn default() -> Self {
-        FontStyle::Default
-    }
 }
 
 /// Point to anchor text to

@@ -2,6 +2,7 @@ use clap::Parser;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::str::FromStr;
 #[cfg(test)]
 mod tests;
 
