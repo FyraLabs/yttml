@@ -74,6 +74,22 @@ macro_rules! define_ass_test {
 
             // Compare and report differences
             if let Err(diffs) = compare_ass_files(&expected_parsed, &actual_parsed) {
+                // Helper to count events in a Script
+                fn count_events(script: &ass_core::parser::Script) -> usize {
+                    script.sections().iter().filter_map(|s| match s {
+                        ass_core::parser::ast::Section::Events(events) => Some(events.len()),
+                        _ => None,
+                    }).sum()
+                }
+                
+                // Helper to count styles in a Script
+                fn count_styles(script: &ass_core::parser::Script) -> usize {
+                    script.sections().iter().filter_map(|s| match s {
+                        ass_core::parser::ast::Section::Styles(styles) => Some(styles.len()),
+                        _ => None,
+                    }).sum()
+                }
+                
                 eprintln!(
                     "\n[round-trip stage: {}] {} CONVERSION DIFFERENCES:",
                     STAGE_COMPARE_ASS, $test_file
@@ -83,13 +99,13 @@ macro_rules! define_ass_test {
                 }
                 eprintln!(
                     "\nExpected {} dialogue lines, got {}",
-                    expected_parsed.events().len(),
-                    actual_parsed.events().len()
+                    count_events(&expected_parsed),
+                    count_events(&actual_parsed)
                 );
                 eprintln!(
                     "Expected {} styles, got {}",
-                    expected_parsed.styles().len(),
-                    actual_parsed.styles().len()
+                    count_styles(&expected_parsed),
+                    count_styles(&actual_parsed)
                 );
 
                 // Fail the test with detailed error message
