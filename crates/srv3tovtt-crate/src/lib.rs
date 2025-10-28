@@ -1535,6 +1535,14 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
     writeln!(&mut output, "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding").unwrap();
     
     for style in subtitle.styles() {
+        // Work around aspasia limitation: Box styles need outline=0.01 for border_style=3
+        // but outline field is i64, so we manually format it
+        let outline_str = if style.border_style == 3 && style.outline == 0 {
+            "0.01".to_string()
+        } else {
+            style.outline.to_string()
+        };
+        
         writeln!(
             &mut output,
             "Style: {},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}",
@@ -1554,7 +1562,7 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
             style.spacing,
             style.angle,
             style.border_style,
-            style.outline,
+            outline_str,
             style.shadow,
             style.alignment,
             style.margin_l,
