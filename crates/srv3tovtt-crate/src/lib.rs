@@ -1053,6 +1053,8 @@ pub fn to_vtt(captions: &srv3_ttml::TimedText) -> std::io::Result<WebVttSubtitle
     Ok(aspasia::WebVttSubtitle::from_str(&w).unwrap())
 }
 
+const BOX_STYLE_OUTLINE: &str = "0.01";
+
 fn create_youtube_styles() -> Vec<AssStyle> {
     vec![
         AssStyle {
@@ -1538,9 +1540,9 @@ pub fn to_ass(captions: &srv3_ttml::TimedText) -> std::io::Result<String> {
         // Work around aspasia limitation: Box styles need outline=0.01 for border_style=3
         // but outline field is i64, so we manually format it
         let outline_str = if style.border_style == 3 && style.outline == 0 {
-            "0.01".to_string()
+            BOX_STYLE_OUTLINE
         } else {
-            style.outline.to_string()
+            &style.outline.to_string()
         };
         
         writeln!(
