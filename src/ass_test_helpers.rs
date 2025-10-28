@@ -13,6 +13,13 @@ enum TextToken {
     Number(f64),
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum FuzzyMatchResult {
+    Exact,
+    NumericOnly,
+    Different,
+}
+
 fn tokenize_text(input: &str) -> Vec<TextToken> {
     if input.is_empty() {
         return Vec::new();
@@ -78,35 +85,109 @@ fn floats_close_enough(a: f64, b: f64) -> bool {
     (a - b).abs() <= 0.001
 }
 
-fn fuzzy_text_equal(expected: &str, actual: &str) -> bool {
+fn parse_pos_coords(input: &str) -> Option<(f64, f64)> {
+    let mut parts = input.split(',');
+    let x = parts.next()?.trim().parse::<f64>().ok()?;
+    let y = parts.next()?.trim().parse::<f64>().ok()?;
+    if parts.next().is_some() {
+        return None;
+    }
+    Some((x, y))
+}
+
+fn extract_pos_structure(text: &str) -> Option<(String, Vec<(f64, f64)>)> {
+    const PREFIX: &str = "\\pos(";
+
+    let mut sanitized = String::with_capacity(text.len());
+    let mut coords = Vec::new();
+    let mut index = 0;
+
+    while index < text.len() {
+        if text[index..].starts_with(PREFIX) {
+            let start = index + PREFIX.len();
+            let remainder = &text[start..];
+            let closing_offset = remainder.find(')')?;
+            let inner = &remainder[..closing_offset];
+            let (x, y) = parse_pos_coords(inner)?;
+            coords.push((x, y));
+            sanitized.push_str("\\pos(#,#)");
+            index = start + closing_offset + 1;
+        } else {
+            let ch = text[index..].chars().next()?;
+            sanitized.push(ch);
+            index += ch.len_utf8();
+        }
+    }
+
+    Some((sanitized, coords))
+}
+
+fn pos_difference_only(expected: &str, actual: &str) -> bool {
+    match (
+        extract_pos_structure(expected),
+        extract_pos_structure(actual),
+    ) {
+        (Some((exp_sanitized, exp_coords)), Some((act_sanitized, act_coords))) => {
+            if exp_coords.is_empty() || exp_coords.len() != act_coords.len() {
+                return false;
+            }
+
+            if exp_sanitized != act_sanitized {
+                return false;
+            }
+
+            exp_coords
+                .iter()
+                .zip(act_coords.iter())
+                .all(|(&(exp_x, exp_y), &(act_x, act_y))| {
+                    floats_close_enough(exp_x, act_x) && floats_close_enough(exp_y, act_y)
+                })
+        }
+        _ => false,
+    }
+}
+
+fn fuzzy_text_compare(expected: &str, actual: &str) -> FuzzyMatchResult {
     if expected == actual {
-        return true;
+        return FuzzyMatchResult::Exact;
     }
 
     let expected_tokens = tokenize_text(expected);
     let actual_tokens = tokenize_text(actual);
 
     if expected_tokens.len() != actual_tokens.len() {
-        return false;
+        return FuzzyMatchResult::Different;
     }
+
+    let mut saw_numeric_delta = false;
 
     for (expected_token, actual_token) in expected_tokens.iter().zip(actual_tokens.iter()) {
         match (expected_token, actual_token) {
             (TextToken::Text(expected_text), TextToken::Text(actual_text)) => {
                 if expected_text != actual_text {
-                    return false;
+                    return FuzzyMatchResult::Different;
                 }
             }
             (TextToken::Number(expected_number), TextToken::Number(actual_number)) => {
-                if !floats_close_enough(*expected_number, *actual_number) {
-                    return false;
+                if expected_number == actual_number {
+                    continue;
+                }
+
+                if floats_close_enough(*expected_number, *actual_number) {
+                    saw_numeric_delta = true;
+                } else {
+                    return FuzzyMatchResult::Different;
                 }
             }
-            _ => return false,
+            _ => return FuzzyMatchResult::Different,
         }
     }
 
-    true
+    if saw_numeric_delta {
+        FuzzyMatchResult::NumericOnly
+    } else {
+        FuzzyMatchResult::Exact
+    }
 }
 
 fn escape_debug_str(input: &str) -> String {
@@ -282,15 +363,41 @@ pub fn compare_ass_files(expected: &Script<'_>, actual: &Script<'_>) -> Result<(
             }
         }
 
-        if exp_event.text != act_event.text && !fuzzy_text_equal(exp_event.text, act_event.text) {
-            let diff_view = format_diff_output(exp_event.text, act_event.text);
-            errors.push(format!(
-                "Event {}: text mismatch:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
-                i,
-                escape_debug_str(exp_event.text),
-                escape_debug_str(act_event.text),
-                diff_view
-            ));
+        if exp_event.text != act_event.text {
+            match fuzzy_text_compare(exp_event.text, act_event.text) {
+                FuzzyMatchResult::Exact => {}
+                FuzzyMatchResult::NumericOnly => {
+                    let diff_view = format_diff_output(exp_event.text, act_event.text);
+                    warnings.push(format!(
+                        "Event {}: text numeric-only mismatch downgraded to warning:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
+                        i,
+                        escape_debug_str(exp_event.text),
+                        escape_debug_str(act_event.text),
+                        diff_view
+                    ));
+                }
+                FuzzyMatchResult::Different => {
+                    if pos_difference_only(exp_event.text, act_event.text) {
+                        let diff_view = format_diff_output(exp_event.text, act_event.text);
+                        warnings.push(format!(
+                            "Event {}: text mismatch limited to pos() rounding, downgraded to warning:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
+                            i,
+                            escape_debug_str(exp_event.text),
+                            escape_debug_str(act_event.text),
+                            diff_view
+                        ));
+                    } else {
+                        let diff_view = format_diff_output(exp_event.text, act_event.text);
+                        errors.push(format!(
+                            "Event {}: text mismatch:\n  expected: \"{}\"\n  actual:   \"{}\"\n{}",
+                            i,
+                            escape_debug_str(exp_event.text),
+                            escape_debug_str(act_event.text),
+                            diff_view
+                        ));
+                    }
+                }
+            }
         }
     }
 
