@@ -18,11 +18,7 @@ editor, the format is called YTT (YouTube Timed Text), version 3 (also called SR
 This format supports almost all the features you would expect from an advanced format like SSA (SubStation Alpha),
 including text formatting, custom fonts, text alignment, text rotation, karaoke timing, and more.
 
-The original YTSubConverter was a C# utility that allowed you to convert between various subtitle formats, focusing primarily
-on converting SSA to SRV3. However, the CLI interface was quite clunky and the codebase was not very maintainable, and there was
-a complete lack of documentation on the SRV3 format.
-
-This project was created to provide a more modern and maintainable alternative to the original YTSubConverter,
+This project was created to provide a more modern and maintainable alternative to YTSubConverter,
 and to fully document and study YouTube's proprietary subtitle format.
 
 ## The SRV3 (YouTube Timed Text) Format
